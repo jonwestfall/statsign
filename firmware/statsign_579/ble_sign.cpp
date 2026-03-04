@@ -50,30 +50,19 @@ class CtrlCallbacks : public NimBLECharacteristicCallbacks {
 
     if (cmd.startsWith("BEGIN ")) {
       // BEGIN w h len crc
-      int w, h;
-      unsigned int len;
-      char crcHex[16] = {0};
+      int w = 0, h = 0;
+unsigned int len = 0;
+unsigned int crc = 0;
 
-      int n = sscanf(cmd.c_str(), "BEGIN %d %d %u %8s", &w, &h, &len, crcHex);
-      if (n < 4) { notifyMsg("ERR BEGIN\n"); return; }
+int n = sscanf(cmd.c_str(), "BEGIN %d %d %u %x", &w, &h, &len, &crc);
+if (n < 4) {
+  notifyMsg("ERR BEGIN\n");
+  Serial.printf("BEGIN parse fail: '%s'\n", cmd.c_str());
+  return;
+}
 
-      // For MVP: enforce exact expected dimensions/length
-      if (w != kW || h != kH || (size_t)len != kFbLen) {
-        notifyMsg("ERR SIZE\n");
-        return;
-      }
-
-      gFbLen = (size_t)len;
-
-      // Allocate framebuffer once if needed
-      if (!gFb) {
-        gFb = (uint8_t*)heap_caps_malloc(gFbLen, MALLOC_CAP_SPIRAM);
-        if (!gFb) gFb = (uint8_t*)heap_caps_malloc(gFbLen, MALLOC_CAP_8BIT);
-        if (!gFb) { notifyMsg("ERR NOMEM\n"); return; }
-      }
-
-      resetTransfer();
-      gExpectedCrc = (uint32_t)strtoul(crcHex, nullptr, 16);
+Serial.printf("BEGIN w=%d h=%d len=%u crc=%08x\n", w, h, len, crc);
+gExpectedCrc = (uint32_t)crc;
       gTransferring = true;
       notifyMsg("READY\n");
       return;
@@ -115,6 +104,7 @@ class CtrlCallbacks : public NimBLECharacteristicCallbacks {
 
 class DataCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* chr, NimBLEConnInfo& /*connInfo*/) override {
+    
     if (!gTransferring || !gFb) return;
 
     std::string v = chr->getValue();
@@ -127,7 +117,8 @@ class DataCallbacks : public NimBLECharacteristicCallbacks {
     memcpy(gFb + gOff, p, n);
     size_t before = gOff;
     gOff += n;
-
+    Serial.printf("DATA chunk received: %u bytes, total=%u/%u\n",
+              (unsigned)v.size(), (unsigned)gOff, (unsigned)gFbLen);
     // ACK every kAckEvery bytes (or on completion)
     if (((before / kAckEvery) != (gOff / kAckEvery)) || gOff == gFbLen) {
       notifyMsg("ACK " + String((unsigned int)gOff) + "\n");
@@ -139,6 +130,7 @@ void ble_init(OnFrameReadyFn onFrameReady) {
   gOnFrameReady = onFrameReady;
 
   NimBLEDevice::init(kBleName);
+  NimBLEDevice::setMTU(247);
   NimBLEServer* server = NimBLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
 
