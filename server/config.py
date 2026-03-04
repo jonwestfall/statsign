@@ -36,6 +36,9 @@ class Settings:
 
     ttf_path: str = ""
     state_file: Path = Path("server/data/state.json")
+    presets_file: Path = Path("server/data/presets.json")
+    uploads_dir: Path = Path("server/data/uploads")
+    builtins_dir: Path = Path("server/assets/icons")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -47,8 +50,9 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def load_settings() -> Settings:
     root = Path(__file__).resolve().parents[1]
-    default_ttf = root / "server" / "assets" / "RobotoMono.ttf"
-    default_state = root / "server" / "data" / "state.json"
+    server_dir = root / "server"
+    default_ttf = server_dir / "assets" / "RobotoMono.ttf"
+    data_dir = server_dir / "data"
 
     return Settings(
         app_version=os.getenv("STATSIGN_APP_VERSION", DEFAULT_APP_VERSION),
@@ -66,5 +70,8 @@ def load_settings() -> Settings:
         ble_write_response=_env_bool("STATSIGN_WRITE_RESPONSE", False),
         ble_yield_every_chunks=int(os.getenv("STATSIGN_YIELD_EVERY_CHUNKS", "8")),
         ttf_path=os.getenv("STATSIGN_TTF_PATH", str(default_ttf if default_ttf.exists() else "")),
-        state_file=Path(os.getenv("STATSIGN_STATE_FILE", str(default_state))),
+        state_file=Path(os.getenv("STATSIGN_STATE_FILE", str(data_dir / "state.json"))),
+        presets_file=Path(os.getenv("STATSIGN_PRESETS_FILE", str(data_dir / "presets.json"))),
+        uploads_dir=Path(os.getenv("STATSIGN_UPLOADS_DIR", str(data_dir / "uploads"))),
+        builtins_dir=Path(os.getenv("STATSIGN_BUILTIN_ICONS_DIR", str(server_dir / "assets" / "icons"))),
     )

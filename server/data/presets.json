@@ -1,0 +1,46 @@
+[
+  {
+    "id": "in-office",
+    "name": "In office",
+    "status": "In Office",
+    "message": "Drop by if the door is open.",
+    "layout": "headline",
+    "icon": "builtin:office"
+  },
+  {
+    "id": "in-class",
+    "name": "In class",
+    "status": "Teaching",
+    "message": "In class now. Back around {return_time}",
+    "return_time": "2:15 PM",
+    "layout": "split",
+    "icon": "builtin:class"
+  },
+  {
+    "id": "in-meeting",
+    "name": "In meeting",
+    "status": "In a Meeting",
+    "message": "Please send a message and I'll reply after {return_time}",
+    "return_time": "11:30 AM",
+    "layout": "badge",
+    "icon": "builtin:meeting"
+  },
+  {
+    "id": "back-at-time",
+    "name": "Back at time",
+    "status": "Be Right Back",
+    "message": "Back at {return_time}",
+    "return_time": "3:00 PM",
+    "layout": "split",
+    "icon": "builtin:away"
+  },
+  {
+    "id": "out-for-lunch",
+    "name": "Out for lunch",
+    "status": "Lunch Break",
+    "message": "Out for lunch. Back by {return_time}",
+    "return_time": "1:00 PM",
+    "layout": "headline",
+    "icon": "builtin:lunch"
+  }
+]

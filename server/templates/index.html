@@ -4,125 +4,204 @@
     <meta charset="utf-8" />
     <title>Statsign Controller</title>
     <style>
-      body { font-family: sans-serif; max-width: 900px; margin: 24px auto; }
-      label { display: block; margin-top: 12px; font-weight: 600; }
-      input, select { width: 100%; padding: 8px; box-sizing: border-box; }
-      .buttons { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
-      button { padding: 10px 14px; }
-      #preview { width: 100%; border: 1px solid #ccc; margin-top: 16px; }
-      #logs { background: #111; color: #e7e7e7; padding: 10px; min-height: 140px; white-space: pre-wrap; }
-      .hint { color: #555; font-size: 0.9rem; }
+      body { font-family: sans-serif; max-width: 1150px; margin: 24px auto; }
+      .grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+      label { display:block; margin-top:8px; font-weight:600; }
+      input, select, textarea, button { width:100%; padding:8px; box-sizing:border-box; }
+      textarea { min-height:72px; }
+      .row { display:flex; gap:8px; }
+      .row > * { flex:1; }
+      #preview { width:100%; border:1px solid #ccc; }
+      #logs { background:#111; color:#eee; padding:8px; min-height:120px; white-space:pre-wrap; }
+      details { border:1px solid #ddd; padding:10px; margin-top:10px; }
+      #designerWrap { border:1px solid #ddd; padding:10px; margin-top:10px; }
+      #designerCanvas { width:100%; border:1px dashed #aaa; image-rendering:pixelated; background:#fff; }
     </style>
   </head>
   <body>
-    <h2>Statsign Remote Door Sign Controller</h2>
-    <p class="hint">Target BLE peripheral: <strong>{{ device_name }}</strong></p>
+    <h2>Statsign Controller</h2>
+    <p>BLE target: <strong>{{ device_name }}</strong> · <a href="/presets">Edit presets</a></p>
+    <div class="grid">
+      <section>
+        <label>Preset</label>
+        <div class="row"><select id="presetSelect"></select><button onclick="applyPreset()">Apply</button></div>
 
-    <label for="status">Status</label>
-    <select id="status">
-      <option>In office</option>
-      <option>In class</option>
-      <option>In a meeting</option>
-      <option>Out</option>
-      <option>WFH</option>
-      <option>Back at &lt;time&gt;</option>
-      <option>Custom</option>
-    </select>
+        <label>Status</label><input id="status" />
+        <label>Message</label><textarea id="message"></textarea>
+        <div class="row">
+          <div><label>Location</label><input id="location" /></div>
+          <div><label>Return time</label><input id="return_time" /></div>
+        </div>
 
-    <label for="message">Message</label>
-    <input id="message" placeholder="Back at 2:15" value="{{ state.message }}" />
+        <label>Layout</label>
+        <select id="layout" onchange="toggleDesigner()">
+          <option value="headline">headline</option>
+          <option value="split">split</option>
+          <option value="badge">badge</option>
+          <option value="designer">designer (WYSIWYG image)</option>
+        </select>
 
-    <label for="location">Location</label>
-    <input id="location" placeholder="Library" value="{{ state.location }}" />
+        <label>Icon</label>
+        <select id="icon">
+          <option value="">(none)</option>
+          {% for icon in builtin_icons %}<option value="builtin:{{ icon }}">builtin:{{ icon }}</option>{% endfor %}
+          {% for file in uploads %}<option value="upload:{{ file }}">upload:{{ file }}</option>{% endfor %}
+        </select>
 
-    <div class="buttons">
-      <button onclick="saveStateAndPreview()">Preview</button>
-      <button onclick="pushToSign()">Push to sign</button>
-      <button onclick="clearSign()">Clear sign</button>
-      <button onclick="demoSign()">Demo sign</button>
+        <label>Full image ref (designer layout)</label>
+        <select id="image">
+          <option value="">(none)</option>
+          {% for file in uploads %}<option value="upload:{{ file }}">upload:{{ file }}</option>{% endfor %}
+        </select>
+
+        <label>Upload image</label><input id="uploadFile" type="file" accept=".png,.jpg,.jpeg,.bmp,.webp" />
+
+        <details>
+          <summary>Advanced style</summary>
+          <div class="row">
+            <div><label>Headline size</label><input id="headline_size" type="number" min="16" max="220" /></div>
+            <div><label>Message size</label><input id="message_size" type="number" min="12" max="180" /></div>
+            <div><label>Footer size</label><input id="footer_size" type="number" min="8" max="80" /></div>
+          </div>
+          <div class="row">
+            <div><label>Align</label><select id="alignment"><option>left</option><option>center</option><option>right</option></select></div>
+            <div><label>Padding</label><input id="padding" type="number" min="0" max="100" /></div>
+          </div>
+          <label><input id="invert" type="checkbox" /> Invert</label>
+          <label><input id="show_updated_timestamp" type="checkbox" /> Show timestamp</label>
+          <label><input id="show_border" type="checkbox" /> Show border</label>
+          <label><input id="debug_boxes" type="checkbox" /> Debug boxes</label>
+          <label><input id="icon_dither" type="checkbox" /> Dither</label>
+        </details>
+      </section>
+
+      <section>
+        <h3>Preview</h3>
+        <img id="preview" src="/preview.png" />
+        <div class="row" style="margin-top:8px;">
+          <button onclick="saveStateAndPreview()">Preview</button>
+          <button onclick="pushToSign()">Push</button>
+          <button onclick="clearSign()">Clear</button>
+          <button onclick="demoSign()">Demo</button>
+        </div>
+
+        <div id="designerWrap" style="display:none;">
+          <h3>WYSIWYG Designer (800x272)</h3>
+          <canvas id="designerCanvas" width="800" height="272"></canvas>
+          <div class="row">
+            <div><label>Designer text</label><input id="d_text" value="In a meeting" /></div>
+            <div><label>Subtext</label><input id="d_subtext" value="Back at 2:30 PM" /></div>
+          </div>
+          <div class="row">
+            <div><label>X</label><input id="d_x" type="number" value="30" /></div>
+            <div><label>Y</label><input id="d_y" type="number" value="90" /></div>
+            <div><label>Title size</label><input id="d_title_size" type="number" value="84" /></div>
+            <div><label>Sub size</label><input id="d_sub_size" type="number" value="42" /></div>
+          </div>
+          <div class="row">
+            <button onclick="drawDesigner()">Redraw</button>
+            <button onclick="uploadDesignerImage()">Save as image + attach</button>
+          </div>
+        </div>
+
+        <h3>Logs</h3>
+        <div id="logs">Ready.</div>
+      </section>
     </div>
 
-    <h3>Preview</h3>
-    <img id="preview" src="/preview.png" alt="Sign preview" />
-
-    <h3>Logs</h3>
-    <div id="logs">Ready.</div>
-
     <script>
-      document.getElementById('status').value = {{ state.status | tojson }};
+      const INITIAL_STATE = {{ state | tojson }};
+      const dCanvas = document.getElementById('designerCanvas');
+      const dCtx = dCanvas.getContext('2d');
 
-      async function postJSON(url, body = {}) {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        let data = {};
-        try { data = await res.json(); } catch (_) {}
-        if (!res.ok) {
-          throw new Error(JSON.stringify(data));
-        }
-        return data;
+      const log = (m) => document.getElementById('logs').textContent = Array.isArray(m) ? m.join('\n') : String(m);
+      const refreshPreview = () => document.getElementById('preview').src = `/preview.png?t=${Date.now()}`;
+
+      async function fetchJSON(url, options={}) {
+        const r = await fetch(url, options); const d = await r.json(); if (!r.ok) throw new Error(JSON.stringify(d)); return d;
       }
 
-      function currentState() {
+      function hydrate(s) {
+        for (const k of ['status','message','location','return_time','layout','icon','image']) {
+          if (document.getElementById(k)) document.getElementById(k).value = s[k] ?? '';
+        }
+        const st = s.style || {};
+        for (const k of ['headline_size','message_size','footer_size','alignment','padding']) if (st[k] !== undefined) document.getElementById(k).value = st[k];
+        for (const k of ['invert','show_updated_timestamp','show_border','debug_boxes','icon_dither']) document.getElementById(k).checked = !!st[k];
+      }
+
+      function statePayload() {
         return {
-          status: document.getElementById('status').value,
-          message: document.getElementById('message').value,
-          location: document.getElementById('location').value,
+          status: status.value, message: message.value, location: location.value, return_time: return_time.value,
+          layout: layout.value, icon: icon.value, image: image.value,
+          variables: { location: location.value, return_time: return_time.value },
+          style: {
+            headline_size: Number(headline_size.value || 86), message_size: Number(message_size.value || 42), footer_size: Number(footer_size.value || 20),
+            alignment: alignment.value, padding: Number(padding.value || 18), invert: invert.checked,
+            show_updated_timestamp: show_updated_timestamp.checked, show_border: show_border.checked,
+            debug_boxes: debug_boxes.checked, icon_dither: icon_dither.checked,
+          },
         };
       }
 
-      function refreshPreview() {
-        document.getElementById('preview').src = `/preview.png?t=${Date.now()}`;
+      async function loadPresets() {
+        const res = await fetchJSON('/api/presets');
+        presetSelect.innerHTML = '<option value="">(select preset)</option>';
+        for (const p of res.presets) presetSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
       }
-
-      function setLogs(lines) {
-        if (Array.isArray(lines)) {
-          document.getElementById('logs').textContent = lines.join('\n');
-        } else {
-          document.getElementById('logs').textContent = String(lines);
-        }
+      async function applyPreset() {
+        if (!presetSelect.value) return;
+        const res = await fetchJSON(`/api/presets/${presetSelect.value}/apply`, { method:'POST' });
+        hydrate(res.state); toggleDesigner(); refreshPreview(); log(`Applied ${presetSelect.value}`);
       }
 
       async function saveStateAndPreview() {
-        try {
-          await postJSON('/api/state', currentState());
-          refreshPreview();
-          setLogs('State updated.');
-        } catch (err) {
-          setLogs(`Preview failed: ${err.message}`);
-        }
+        await fetchJSON('/api/state', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(statePayload()) });
+        refreshPreview(); log('State saved.');
+      }
+      async function pushToSign() { try { await saveStateAndPreview(); const r = await fetchJSON('/api/push', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); log(r.logs || ['Push complete']); } catch(e){log(e.message);} }
+      async function clearSign() { try { const r = await fetchJSON('/api/clear', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); log(r.logs || ['Clear sent']); } catch(e){log(e.message);} }
+      async function demoSign() { try { const r = await fetchJSON('/api/demo', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); log(r.logs || ['Demo sent']); } catch(e){log(e.message);} }
+
+      function toggleDesigner() {
+        const on = layout.value === 'designer';
+        designerWrap.style.display = on ? 'block' : 'none';
       }
 
-      async function pushToSign() {
-        try {
-          await postJSON('/api/state', currentState());
-          refreshPreview();
-          const res = await postJSON('/api/push');
-          setLogs(res.logs || ['Push completed']);
-        } catch (err) {
-          setLogs(`Push failed: ${err.message}`);
-        }
+      function drawDesigner() {
+        dCtx.fillStyle = invert.checked ? '#000' : '#fff';
+        dCtx.fillRect(0,0,800,272);
+        dCtx.fillStyle = invert.checked ? '#fff' : '#000';
+        dCtx.font = `${Number(d_title_size.value || 84)}px sans-serif`;
+        dCtx.fillText(d_text.value || '', Number(d_x.value || 20), Number(d_y.value || 90));
+        dCtx.font = `${Number(d_sub_size.value || 42)}px sans-serif`;
+        dCtx.fillText(d_subtext.value || '', Number(d_x.value || 20), Number(d_y.value || 90) + Number(d_sub_size.value || 42) + 14);
+        if (show_border.checked) { dCtx.strokeStyle = invert.checked ? '#fff' : '#000'; dCtx.strokeRect(1,1,798,270); }
       }
 
-      async function clearSign() {
-        try {
-          const res = await postJSON('/api/clear');
-          setLogs(res.logs || ['Clear command sent']);
-        } catch (err) {
-          setLogs(`Clear failed: ${err.message}`);
-        }
+      async function uploadDesignerImage() {
+        drawDesigner();
+        const blob = await new Promise((resolve) => dCanvas.toBlob(resolve, 'image/png'));
+        if (!blob) return;
+        const res = await fetchJSON('/api/upload', { method:'POST', headers:{'Content-Type':'image/png','X-Filename':'designer.png'}, body: await blob.arrayBuffer() });
+        const ref = res.image || res.icon;
+        const opt = `<option value="${ref}">${ref}</option>`;
+        image.innerHTML += opt; icon.innerHTML += opt;
+        image.value = ref; icon.value = ref; layout.value = 'designer'; toggleDesigner();
+        await saveStateAndPreview();
+        log(`Designer image uploaded: ${res.filename}`);
       }
 
-      async function demoSign() {
-        try {
-          const res = await postJSON('/api/demo');
-          setLogs(res.logs || ['Demo command sent']);
-        } catch (err) {
-          setLogs(`Demo failed: ${err.message}`);
-        }
-      }
+      uploadFile.addEventListener('change', async (e) => {
+        const file = e.target.files[0]; if (!file) return;
+        const res = await fetchJSON('/api/upload', { method:'POST', headers:{'Content-Type': file.type || 'image/png', 'X-Filename': file.name}, body: await file.arrayBuffer() });
+        const ref = res.image || res.icon;
+        icon.innerHTML += `<option value="${ref}">${ref}</option>`;
+        image.innerHTML += `<option value="${ref}">${ref}</option>`;
+        icon.value = ref; image.value = ref; log(`Uploaded ${res.filename}`);
+      });
+
+      hydrate(INITIAL_STATE); loadPresets(); toggleDesigner(); drawDesigner();
     </script>
   </body>
 </html>
