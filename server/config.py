@@ -4,19 +4,26 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_APP_VERSION = "0.1.0"
+DEFAULT_DEVICE_NAME = "JON_EINK_579"
+DEFAULT_SERVICE_UUID = "6a4e0001-6f44-4f7a-a3b2-2f9b3c1c0001"
+DEFAULT_CTRL_UUID = "6a4e0002-6f44-4f7a-a3b2-2f9b3c1c0001"
+DEFAULT_DATA_UUID = "6a4e0003-6f44-4f7a-a3b2-2f9b3c1c0001"
+DEFAULT_PROG_UUID = "6a4e0004-6f44-4f7a-a3b2-2f9b3c1c0001"
+
 
 @dataclass(slots=True)
 class Settings:
-    app_version: str = "0.1.0"
+    app_version: str = DEFAULT_APP_VERSION
 
     display_width: int = 800
     display_height: int = 272
 
-    ble_device_name: str = "JON_EINK_579"
-    ble_service_uuid: str = "6a4e0001-6f44-4f7a-a3b2-2f9b3c1c0001"
-    ble_ctrl_uuid: str = "6a4e0002-6f44-4f7a-a3b2-2f9b3c1c0001"
-    ble_data_uuid: str = "6a4e0003-6f44-4f7a-a3b2-2f9b3c1c0001"
-    ble_prog_uuid: str = "6a4e0004-6f44-4f7a-a3b2-2f9b3c1c0001"
+    ble_device_name: str = DEFAULT_DEVICE_NAME
+    ble_service_uuid: str = DEFAULT_SERVICE_UUID
+    ble_ctrl_uuid: str = DEFAULT_CTRL_UUID
+    ble_data_uuid: str = DEFAULT_DATA_UUID
+    ble_prog_uuid: str = DEFAULT_PROG_UUID
 
     ble_scan_timeout_s: float = 10.0
     ble_connect_timeout_s: float = 10.0
@@ -44,12 +51,12 @@ def load_settings() -> Settings:
     default_state = root / "server" / "data" / "state.json"
 
     return Settings(
-        app_version=os.getenv("STATSIGN_APP_VERSION", "0.1.0"),
-        ble_device_name=os.getenv("STATSIGN_DEVICE_NAME", "JON_EINK_579"),
-        ble_service_uuid=os.getenv("STATSIGN_SERVICE_UUID", Settings.ble_service_uuid),
-        ble_ctrl_uuid=os.getenv("STATSIGN_CTRL_UUID", Settings.ble_ctrl_uuid),
-        ble_data_uuid=os.getenv("STATSIGN_DATA_UUID", Settings.ble_data_uuid),
-        ble_prog_uuid=os.getenv("STATSIGN_PROG_UUID", Settings.ble_prog_uuid),
+        app_version=os.getenv("STATSIGN_APP_VERSION", DEFAULT_APP_VERSION),
+        ble_device_name=os.getenv("STATSIGN_DEVICE_NAME", DEFAULT_DEVICE_NAME),
+        ble_service_uuid=os.getenv("STATSIGN_SERVICE_UUID", DEFAULT_SERVICE_UUID),
+        ble_ctrl_uuid=os.getenv("STATSIGN_CTRL_UUID", DEFAULT_CTRL_UUID),
+        ble_data_uuid=os.getenv("STATSIGN_DATA_UUID", DEFAULT_DATA_UUID),
+        ble_prog_uuid=os.getenv("STATSIGN_PROG_UUID", DEFAULT_PROG_UUID),
         ble_scan_timeout_s=float(os.getenv("STATSIGN_SCAN_TIMEOUT_S", "10")),
         ble_connect_timeout_s=float(os.getenv("STATSIGN_CONNECT_TIMEOUT_S", "10")),
         ble_push_done_timeout_s=float(os.getenv("STATSIGN_PUSH_DONE_TIMEOUT_S", "35")),
