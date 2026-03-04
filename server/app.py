@@ -186,7 +186,8 @@ async def upload_image(request: Request):
     if not content:
         raise HTTPException(status_code=400, detail="Empty upload body")
     out_path.write_bytes(content)
-    return {"ok": True, "filename": out_name, "icon": f"upload:{out_name}", "url": f"/uploads/{out_name}"}
+    ref = f"upload:{out_name}"
+    return {"ok": True, "filename": out_name, "icon": ref, "image": ref, "url": f"/uploads/{out_name}"}
 
 
 

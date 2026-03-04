@@ -33,6 +33,7 @@ class SignState:
     return_time: str = ""
     layout: str = "headline"
     icon: str = ""
+    image: str = ""
     variables: dict[str, str] = field(default_factory=dict)
     style: StyleOptions = field(default_factory=StyleOptions)
 
@@ -45,9 +46,9 @@ def state_to_dict(state: SignState) -> dict[str, Any]:
 
 class StyleInput(BaseModel):
     font_family: str = ""
-    headline_size: int = Field(default=86, ge=24, le=180)
-    message_size: int = Field(default=42, ge=16, le=120)
-    footer_size: int = Field(default=20, ge=10, le=80)
+    headline_size: int = Field(default=86, ge=16, le=220)
+    message_size: int = Field(default=42, ge=12, le=180)
+    footer_size: int = Field(default=20, ge=8, le=80)
     alignment: str = Field(default="left", pattern="^(left|center|right)$")
     padding: int = Field(default=18, ge=0, le=100)
     invert: bool = False
@@ -62,8 +63,9 @@ class StateInput(BaseModel):
     message: str = ""
     location: str = ""
     return_time: str = ""
-    layout: str = Field(default="headline", pattern="^(headline|split|badge)$")
+    layout: str = Field(default="headline", pattern="^(headline|split|badge|designer)$")
     icon: str = ""
+    image: str = ""
     variables: dict[str, str] = Field(default_factory=dict)
     style: StyleInput = Field(default_factory=StyleInput)
 
@@ -186,7 +188,7 @@ class PresetStore:
         tmp.replace(self.path)
 
 
-def apply_state_input(current: SignState, payload: StateInput) -> SignState:
+def apply_state_input(payload: StateInput) -> SignState:
     style = StyleOptions(**payload.style.model_dump())
     return SignState(
         status=payload.status,
@@ -195,12 +197,12 @@ def apply_state_input(current: SignState, payload: StateInput) -> SignState:
         return_time=payload.return_time,
         layout=payload.layout,
         icon=payload.icon,
+        image=payload.image,
         variables=payload.variables,
         style=style,
     )
 
 
 def state_from_dict(payload: dict[str, Any]) -> SignState:
-    style_input = StyleInput(**payload.get("style", {}))
-    state_input = StateInput(**{**payload, "style": style_input})
-    return apply_state_input(SignState(), state_input)
+    state_input = StateInput(**payload)
+    return apply_state_input(state_input)

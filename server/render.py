@@ -11,7 +11,8 @@ from presets import SignState
 
 
 def _load_font(size: int, ttf_path: str, font_family: str = "") -> ImageFont.ImageFont:
-    for path in (font_family, ttf_path):
+    # Keep size-responsive behavior even when custom fonts are missing.
+    for path in (font_family, ttf_path, "DejaVuSans-Bold.ttf", "DejaVuSans.ttf"):
         if path:
             try:
                 return ImageFont.truetype(path, size=size)
@@ -42,14 +43,12 @@ def _wrap_with_ellipsis(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.Im
             break
     if len(lines) < max_lines and cur:
         lines.append(cur)
-    if len(lines) > max_lines:
-        lines = lines[:max_lines]
     if words and len(" ".join(lines).split()) < len(words):
         last = lines[-1]
         while last and draw.textlength(f"{last}…", font=font) > max_width:
             last = last[:-1]
         lines[-1] = f"{last.rstrip()}…"
-    return lines
+    return lines[:max_lines]
 
 
 def _fit_font(draw: ImageDraw.ImageDraw, text: str, start_size: int, min_size: int, max_width: int, ttf_path: str, font_family: str) -> ImageFont.ImageFont:
@@ -99,13 +98,25 @@ def render_sign_image(state: SignState, width: int, height: int, ttf_path: str =
     message = _substitute(state.message.strip(), state)
     stamp = datetime.now().strftime("Updated %H:%M")
 
+    # WYSIWYG / full-image layout path.
+    if state.layout == "designer":
+        base_ref = state.image or state.icon
+        if uploads_dir and icons_dir and base_ref:
+            source = resolve_icon(base_ref, uploads_dir, icons_dir)
+            if source:
+                fitted = fit_image_to_box(source, width, height, dither=state.style.icon_dither, invert=state.style.invert)
+                img.paste(fitted, (0, 0))
+        if state.style.show_border:
+            draw.rectangle((1, 1, width - 2, height - 2), outline=fg, width=1)
+        return img.point(lambda p: 0 if p < 128 else 255, mode="1")
+
     if state.layout == "split":
         left_w = int(cw * 0.66)
         right_w = cw - left_w - 8
         lx, ly = content[0], content[1]
         rx, ry = lx + left_w + 8, content[1]
 
-        headline_font = _fit_font(draw, status, state.style.headline_size, 36, left_w, ttf_path, state.style.font_family)
+        headline_font = _fit_font(draw, status, state.style.headline_size, 24, left_w, ttf_path, state.style.font_family)
         message_font = _load_font(state.style.message_size, ttf_path, state.style.font_family)
         footer_font = _load_font(state.style.footer_size, ttf_path, state.style.font_family)
 
@@ -121,14 +132,14 @@ def render_sign_image(state: SignState, width: int, height: int, ttf_path: str =
                 fitted = fit_image_to_box(icon, right_w, icon_h, dither=state.style.icon_dither, invert=state.style.invert)
                 img.paste(fitted, (rx, ry))
 
-        rt_font = _fit_font(draw, state.return_time or "--:--", 52, 26, right_w, ttf_path, state.style.font_family)
-        draw.text((rx, ry + icon_h + 10), f"Back at", font=footer_font, fill=fg)
+        rt_font = _fit_font(draw, state.return_time or "--:--", max(state.style.message_size + 8, 42), 22, right_w, ttf_path, state.style.font_family)
+        draw.text((rx, ry + icon_h + 10), "Back at", font=footer_font, fill=fg)
         draw.text((rx, ry + icon_h + 10 + _line_height(footer_font)), state.return_time or "--:--", font=rt_font, fill=fg)
 
     elif state.layout == "badge":
         banner_h = int(ch * 0.42)
         draw.rectangle((content[0], content[1], content[2], content[1] + banner_h), fill=fg)
-        status_font = _fit_font(draw, status, state.style.headline_size, 30, cw - 16, ttf_path, state.style.font_family)
+        status_font = _fit_font(draw, status, state.style.headline_size, 22, cw - 16, ttf_path, state.style.font_family)
         sw = draw.textlength(status, font=status_font)
         sx = content[0] + (cw - sw) / 2
         sy = content[1] + (banner_h - _line_height(status_font)) / 2
@@ -147,8 +158,8 @@ def render_sign_image(state: SignState, width: int, height: int, ttf_path: str =
         lines = _wrap_with_ellipsis(draw, message, message_font, tw, max(1, (ch - banner_h - 8) // _line_height(message_font)))
         _draw_lines(draw, lines, tx, body_y, message_font, fg, "left", tw)
 
-    else:  # headline
-        headline_font = _fit_font(draw, status, state.style.headline_size, 34, cw, ttf_path, state.style.font_family)
+    else:
+        headline_font = _fit_font(draw, status, state.style.headline_size, 24, cw, ttf_path, state.style.font_family)
         message_font = _load_font(state.style.message_size, ttf_path, state.style.font_family)
         footer_font = _load_font(state.style.footer_size, ttf_path, state.style.font_family)
 
@@ -156,7 +167,7 @@ def render_sign_image(state: SignState, width: int, height: int, ttf_path: str =
         y = _draw_lines(draw, [status], content[0], y, headline_font, fg, state.style.alignment, cw) + 4
         max_lines = max(1, (content[3] - y - _line_height(footer_font) - 8) // _line_height(message_font))
         lines = _wrap_with_ellipsis(draw, message, message_font, cw, max_lines)
-        y = _draw_lines(draw, lines, content[0], y, message_font, fg, state.style.alignment, cw)
+        _draw_lines(draw, lines, content[0], y, message_font, fg, state.style.alignment, cw)
 
         if uploads_dir and icons_dir:
             icon = resolve_icon(state.icon, uploads_dir, icons_dir)

@@ -3,7 +3,7 @@
 Local web + BLE controller for the Statsign 5.79" display firmware.
 
 ## Features
-- Rich sign editor on `/` with large typography, layout selector (`headline`, `split`, `badge`), icon picker, advanced styling options, live preview, and BLE push.
+- Rich sign editor on `/` with large typography, layout selector (`headline`, `split`, `badge`, `designer`), icon picker, advanced styling options, live preview, and BLE push.
 - Preset manager on `/presets` with runtime CRUD backed by `server/data/presets.json`.
 - Preview endpoint at `/preview.png` (exact 800x272 1bpp render).
 - BLE push pipeline unchanged (`BEGIN` + framebuffer + `END`) plus `CLEAR` and `DEMO` controls.
@@ -61,6 +61,8 @@ Preset API:
 - `style` options (`headline_size`, `message_size`, `footer_size`, `padding`, `alignment`, `invert`, `show_border`, `show_updated_timestamp`, `debug_boxes`, `icon_dither`)
 
 Placeholders in `status`/`message` support keys like `{time}`, `{updated}`, `{location}`, `{return_time}`, and custom entries from `variables`.
+
+`designer` layout is a full-image mode: use the WYSIWYG canvas on `/`, export/upload it, and assign the resulting `upload:<filename>` to the `image` field in state or presets.
 
 ## Icons and uploads
 Builtin icons come from `server/assets/icons/*.png` when present, with programmatic fallbacks for:
