@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <string.h>
 
 #include "EPD.h"
 #include "ble_sign.h"
@@ -31,13 +32,42 @@ static void doCleanRefreshIfNeeded() {
 }
 
 static void drawDemoPattern() {
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, Rotation, WHITE);
-  Paint_Clear(WHITE);
+  // Build demo directly in the native row-major 1bpp framebuffer format.
+  // This avoids dependency on paint text/font paths and guarantees visible pixels.
+  memset(ImageBW, 0xFF, kFbLen);
 
-  EPD_DrawRectangle(0, 0, EPD_W - 1, EPD_H - 1, BLACK, 0);
-  EPD_DrawLine(0, 0, EPD_W - 1, EPD_H - 1, BLACK);
-  EPD_DrawLine(EPD_W - 1, 0, 0, EPD_H - 1, BLACK);
-  EPD_ShowString(20, 20, "STATSIGN", 24, BLACK);
+  auto setBlack = [](int x, int y) {
+    if (x < 0 || x >= kW || y < 0 || y >= kH) return;
+    size_t idx = static_cast<size_t>(y) * static_cast<size_t>(kW / 8) + static_cast<size_t>(x / 8);
+    uint8_t bit = static_cast<uint8_t>(7 - (x & 0x7));
+    ImageBW[idx] &= static_cast<uint8_t>(~(1U << bit));
+  };
+
+  // Border
+  for (int x = 0; x < kW; ++x) {
+    setBlack(x, 0);
+    setBlack(x, kH - 1);
+  }
+  for (int y = 0; y < kH; ++y) {
+    setBlack(0, y);
+    setBlack(kW - 1, y);
+  }
+
+  // Diagonal lines
+  for (int x = 0; x < kW; ++x) {
+    int y0 = (x * kH) / kW;
+    int y1 = (kH - 1) - y0;
+    setBlack(x, y0);
+    setBlack(x, y1);
+  }
+
+  // A few horizontal bars to make the pattern obvious
+  for (int y = 32; y < 40; ++y) {
+    for (int x = 32; x < kW - 32; ++x) setBlack(x, y);
+  }
+  for (int y = kH - 40; y < kH - 32; ++y) {
+    for (int x = 32; x < kW - 32; ++x) setBlack(x, y);
+  }
 
   EPD_GPIOInit();
   EPD_FastMode1Init();
