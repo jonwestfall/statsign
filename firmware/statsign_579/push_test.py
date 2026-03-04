@@ -274,11 +274,35 @@ async def list_services(client: BleakClient):
     print("=================================")
 
 
+async def send_ctrl_command(device_name: str, command: str, list_svcs: bool):
+    def on_prog(_, data: bytearray):
+        msg = data.decode(errors="ignore").strip()
+        print(f"[PROG] {msg}")
+
+    dev = await find_device_by_name(device_name)
+
+    async with BleakClient(dev) as client:
+        print("Connecting...")
+        await client.connect()
+        print("Connected.")
+
+        if list_svcs:
+            await list_services(client)
+
+        await client.start_notify(PROG_UUID, on_prog)
+        await client.write_gatt_char(CTRL_UUID, f"{command}\n".encode("ascii"), response=True)
+
+        await asyncio.sleep(1.0)
+
+        await client.stop_notify(PROG_UUID)
+
+
 async def push_over_ble(
     payload: bytes,
     w: int,
     h: int,
     *,
+    device_name: str,
     chunk_size: int,
     ack_every: int,
     ack_timeout_s: float,
@@ -322,7 +346,7 @@ async def push_over_ble(
             progress.done = True
             done_event.set()
 
-    dev = await find_device_by_name(DEVICE_NAME)
+    dev = await find_device_by_name(device_name)
 
     async with BleakClient(dev) as client:
         print("Connecting...")
@@ -436,10 +460,15 @@ async def main():
 
     ap.add_argument("--list-services", action="store_true",
                     help="Print discovered services/characteristics after connecting")
+    ap.add_argument("--ctrl", choices=["INFO", "CLEAR", "DEMO"],
+                    help="Send control command and exit (does not push a frame)")
 
     args = ap.parse_args()
 
-    
+    if args.ctrl:
+        await send_ctrl_command(args.device, args.ctrl, args.list_services)
+        return
+
     img = build_image(args.pattern, args.w, args.h, args.solid, args.checker_cell, args.noise_seed)
     img = apply_transforms(img, args.rotate, bool(args.flip_lr), bool(args.flip_tb))
 
@@ -453,6 +482,7 @@ async def main():
     await push_over_ble(
         payload,
         args.w, args.h,
+        device_name=args.device,
         chunk_size=args.chunk,
         ack_every=args.ack_every,
         ack_timeout_s=args.ack_timeout,

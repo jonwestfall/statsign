@@ -1,16 +1,49 @@
 #include <Arduino.h>
-#include "EPD.h"
-#include "pic_home.h"
 
+#include "EPD.h"
 #include "ble_sign.h"
+#include "pic_home.h"
 #include "sign_protocol.h"
 
-uint8_t ImageBW[27200]; // <-- you won't use this for BLE frames, but keep it for now if you want
+uint8_t ImageBW[kFbLen];
 
 static volatile bool gFrameReady = false;
+static uint32_t gSuccessfulDraws = 0;
 
 void onFrameReady() {
   gFrameReady = true;
+}
+
+static void panelClearAndSleep() {
+  EPD_GPIOInit();
+  EPD_FastMode1Init();
+  EPD_Display_Clear();
+  EPD_Update();
+  EPD_DeepSleep();
+}
+
+static void doCleanRefreshIfNeeded() {
+  if ((gSuccessfulDraws % kCleanRefreshEvery) == 0) {
+    // Library doesn't expose an explicit global/slow refresh API for this path,
+    // so we use clear + full update as our "clean refresh".
+    panelClearAndSleep();
+  }
+}
+
+static void drawDemoPattern() {
+  Paint_NewImage(ImageBW, EPD_W, EPD_H, Rotation, WHITE);
+  Paint_Clear(WHITE);
+
+  EPD_DrawRectangle(0, 0, EPD_W - 1, EPD_H - 1, BLACK, 0);
+  EPD_DrawLine(0, 0, EPD_W - 1, EPD_H - 1, BLACK);
+  EPD_DrawLine(EPD_W - 1, 0, 0, EPD_H - 1, BLACK);
+  EPD_ShowString(20, 20, "STATSIGN", 24, BLACK);
+
+  EPD_GPIOInit();
+  EPD_FastMode1Init();
+  EPD_Display(ImageBW);
+  EPD_FastUpdate();
+  EPD_DeepSleep();
 }
 
 void setup() {
@@ -19,7 +52,6 @@ void setup() {
   pinMode(7, OUTPUT);
   digitalWrite(7, HIGH);
 
-  // Display init (keep as your working baseline)
   EPD_GPIOInit();
   Paint_NewImage(ImageBW, EPD_W, EPD_H, Rotation, WHITE);
   Paint_Clear(WHITE);
@@ -27,23 +59,29 @@ void setup() {
   EPD_Display_Clear();
   EPD_Update();
 
-  // Start BLE receiver
   ble_init(onFrameReady);
 
-  // Optional: show the home image once at boot, so you know it’s alive
   EPD_GPIOInit();
   EPD_FastMode1Init();
   EPD_ShowPicture(0, 0, 792, 272, gImage_home, WHITE);
   EPD_Display(ImageBW);
   EPD_FastUpdate();
   EPD_DeepSleep();
-  delay(5000);               // Wait for 5000 milliseconds (5 seconds)
-  Serial.printf("EPD_W=%d EPD_H=%d\n", EPD_W, EPD_H);
-  clear_all();               // Call the clear_all function to clear the screen content
 
+  Serial.printf("Display ready EPD_W=%d EPD_H=%d fb=%u\n",
+                EPD_W, EPD_H, static_cast<unsigned>(kFbLen));
 }
 
 void loop() {
+  ble_poll();
+
+  BleOp op = ble_take_operation();
+  if (op == BleOp::Clear) {
+    panelClearAndSleep();
+  } else if (op == BleOp::Demo) {
+    drawDemoPattern();
+  }
+
   if (gFrameReady) {
     gFrameReady = false;
 
@@ -51,26 +89,16 @@ void loop() {
     size_t len = ble_framebuffer_len();
 
     if (fb && len == kFbLen) {
-      // Wake + draw using the known-good update sequence
       EPD_GPIOInit();
       EPD_FastMode1Init();
-
-      // IMPORTANT: We need to confirm whether EPD_Display expects:
-      // - a packed 1bpp buffer matching your laptop’s packing, and
-      // - whether bits are inverted.
-      //
-      // For MVP: try direct first.
       EPD_Display(fb);
       EPD_FastUpdate();
       EPD_DeepSleep();
+
+      gSuccessfulDraws++;
+      doCleanRefreshIfNeeded();
     }
   }
 
   delay(20);
-}
-
-void clear_all() {
-  EPD_FastMode1Init();
-  EPD_Display_Clear();
-  EPD_Update();
 }
