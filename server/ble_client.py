@@ -20,6 +20,15 @@ class BleSignClient:
     def __init__(self, settings: Settings):
         self.settings = settings
 
+    @staticmethod
+    def _scanner_error_message(exc: Exception) -> str:
+        if isinstance(exc, ModuleNotFoundError) and exc.name == "winrt._winrt":
+            return (
+                "Windows BLE backend is not available (missing 'winrt._winrt'). "
+                "Install/repair the 'winrt-runtime' package in your virtual environment."
+            )
+        return str(exc)
+
     async def _find_device(self):
         return await BleakScanner.find_device_by_filter(
             lambda d, ad: d.name == self.settings.ble_device_name,
@@ -28,7 +37,10 @@ class BleSignClient:
 
     async def send_control(self, command: str) -> BleResult:
         logs: list[str] = [f"Scanning for {self.settings.ble_device_name}..."]
-        device = await self._find_device()
+        try:
+            device = await self._find_device()
+        except Exception as exc:
+            return BleResult(success=False, logs=logs, error=self._scanner_error_message(exc))
         if not device:
             return BleResult(success=False, logs=logs, error="BLE device not found")
 
@@ -61,7 +73,10 @@ class BleSignClient:
 
     async def push_framebuffer(self, payload: bytes, width: int, height: int) -> BleResult:
         logs: list[str] = [f"Scanning for {self.settings.ble_device_name}..."]
-        device = await self._find_device()
+        try:
+            device = await self._find_device()
+        except Exception as exc:
+            return BleResult(success=False, logs=logs, error=self._scanner_error_message(exc))
         if not device:
             return BleResult(success=False, logs=logs, error="BLE device not found")
 
