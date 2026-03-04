@@ -64,7 +64,6 @@ class CtrlCallbacks : public NimBLECharacteristicCallbacks {
       }
 
       gFbLen = (size_t)len;
-      gExpectedCrc = (uint32_t)strtoul(crcHex, nullptr, 16);
 
       // Allocate framebuffer once if needed
       if (!gFb) {
@@ -74,6 +73,7 @@ class CtrlCallbacks : public NimBLECharacteristicCallbacks {
       }
 
       resetTransfer();
+      gExpectedCrc = (uint32_t)strtoul(crcHex, nullptr, 16);
       gTransferring = true;
       notifyMsg("READY\n");
       return;
