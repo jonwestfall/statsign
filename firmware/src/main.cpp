@@ -159,7 +159,6 @@ void setup() {
 
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
   adv->setName(DEV_NAME);
-  adv->setScanResponse(true);
   adv->addServiceUUID(SVC_UUID);
   adv->start();
 

@@ -158,7 +158,6 @@ void ble_init(OnFrameReadyFn onFrameReady) {
 
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
   adv->setName(kBleName);
-  adv->setScanResponse(true);
   adv->addServiceUUID(kSvcUUID);
   adv->start();
 
