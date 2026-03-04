@@ -53,7 +53,62 @@ async def _wait_for_ack(progress: Progress, sent: int):
     while progress.last_ack < sent:
         await asyncio.sleep(0.01)
 
+def pack_row_major(img_1bit: Image.Image, msb_left: bool = True, white_is_1: bool = True) -> bytes:
+    img = img_1bit.convert("1")
+    w, h = img.size
+    px = img.load()
+    out = bytearray()
 
+    for y in range(h):
+        byte = 0
+        bit = 7 if msb_left else 0
+        step = -1 if msb_left else 1
+
+        for x in range(w):
+            is_white = 1 if px[x, y] else 0
+            bitval = is_white if white_is_1 else (1 - is_white)
+            if bitval:
+                byte |= (1 << bit)
+            bit += step
+
+            if (msb_left and bit < 0) or ((not msb_left) and bit > 7):
+                out.append(byte)
+                byte = 0
+                bit = 7 if msb_left else 0
+
+        # pad remainder
+        if (msb_left and bit != 7) or ((not msb_left) and bit != 0):
+            out.append(byte)
+
+    return bytes(out)
+
+
+def pack_col_major(img_1bit: Image.Image, msb_top: bool = True, white_is_1: bool = True) -> bytes:
+    """
+    1 byte = 8 vertical pixels in a column. Common for some EPD drivers.
+    msb_top: MSB corresponds to the top pixel within the 8-pixel group.
+    """
+    img = img_1bit.convert("1")
+    w, h = img.size
+    px = img.load()
+    out = bytearray()
+
+    for x in range(w):
+        for y0 in range(0, h, 8):
+            byte = 0
+            for i in range(8):
+                y = y0 + i
+                if y >= h:
+                    break
+                is_white = 1 if px[x, y] else 0
+                bitval = is_white if white_is_1 else (1 - is_white)
+                bit = (7 - i) if msb_top else i
+                if bitval:
+                    byte |= (1 << bit)
+            out.append(byte)
+
+    return bytes(out)
+    
 def render_calibration_image(w: int, h: int) -> Image.Image:
     """
     Create a 1-bit calibration image:
@@ -232,6 +287,24 @@ async def push_frame(payload: bytes):
 async def main():
     img = render_calibration_image(W, H)
     payload = pack_1bpp_msb_left(img)
+    img = render_calibration_image(W, H)
+
+    # Try ONE of these at a time:
+
+    # 1) Current behavior (row-major, MSB-left)
+    payload = pack_row_major(img, msb_left=True, white_is_1=True)
+
+    # 2) Row-major, LSB-left
+    # payload = pack_row_major(img, msb_left=False, white_is_1=True)
+
+    # 3) Column-major, MSB-top (very common)
+    # payload = pack_col_major(img, msb_top=True, white_is_1=True)
+
+    # 4) Column-major, LSB-top
+    # payload = pack_col_major(img, msb_top=False, white_is_1=True)
+
+    # If colors inverted, flip white_is_1=False in the call OR XOR the bytes:
+    # payload = bytes((b ^ 0xFF) for b in payload)
     crc = zlib.crc32(payload) & 0xFFFFFFFF
     print(f"Python CRC32: {crc:08x}")
     # Save a local preview for sanity-checking orientation (optional)
