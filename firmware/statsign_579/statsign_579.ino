@@ -23,7 +23,6 @@ void setup() {
   EPD_GPIOInit();
   Paint_NewImage(ImageBW, EPD_W, EPD_H, Rotation, WHITE);
   Paint_Clear(WHITE);
-
   EPD_FastMode1Init();
   EPD_Display_Clear();
   EPD_Update();
@@ -39,7 +38,7 @@ void setup() {
   EPD_FastUpdate();
   EPD_DeepSleep();
   delay(5000);               // Wait for 5000 milliseconds (5 seconds)
-
+  Serial.printf("EPD_W=%d EPD_H=%d\n", EPD_W, EPD_H);
   clear_all();               // Call the clear_all function to clear the screen content
 
 }
