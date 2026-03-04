@@ -38,6 +38,10 @@ void setup() {
   EPD_Display(ImageBW);
   EPD_FastUpdate();
   EPD_DeepSleep();
+  delay(5000);               // Wait for 5000 milliseconds (5 seconds)
+
+  clear_all();               // Call the clear_all function to clear the screen content
+
 }
 
 void loop() {
