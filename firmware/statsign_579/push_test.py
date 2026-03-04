@@ -223,7 +223,8 @@ async def push_frame(payload: bytes):
 async def main():
     img = render_calibration_image(W, H)
     payload = pack_1bpp_msb_left(img)
-
+    crc = zlib.crc32(payload) & 0xFFFFFFFF
+    print(f"Python CRC32: {crc:08x}")
     # Save a local preview for sanity-checking orientation (optional)
     img.convert("L").save("calibration_preview.png")
     print("Wrote calibration_preview.png")

@@ -94,17 +94,21 @@ class CtrlCallbacks : public NimBLECharacteristicCallbacks {
 
       uint32_t got = crc32_le(gFb, gFbLen);
       if (got != gExpectedCrc) {
-        notifyMsg("CRCFAIL\n");
+        Serial.printf("CRC expected=%08x got=%08x len=%u\n",
+        (unsigned)gExpectedCrc, (unsigned)got, (unsigned)gFbLen);
+        notifyMsg("CRCFAIL " + String(got, HEX) + "\n");
+        notifyMsg("DONE\n");          // terminal signal, even on failure
         resetTransfer();
-        return;
+      return;
       }
 
       notifyMsg("CRCOK\n");
-      notifyMsg("DONE\n");
+      notifyMsg("DONE\n");            // terminal signal
       gTransferring = false;
 
       if (gOnFrameReady) gOnFrameReady();
       return;
+
     }
   }
 };
@@ -144,7 +148,7 @@ void ble_init(OnFrameReadyFn onFrameReady) {
     kCtrlUUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY
   );
   NimBLECharacteristic* data = svc->createCharacteristic(
-    kDataUUID, NIMBLE_PROPERTY::WRITE
+    kDataUUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
 
   gProg = svc->createCharacteristic(
