@@ -1,34 +1,128 @@
 <!doctype html>
-<html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Statsign Controller</title>
+    <style>
+      body { font-family: sans-serif; max-width: 900px; margin: 24px auto; }
+      label { display: block; margin-top: 12px; font-weight: 600; }
+      input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+      .buttons { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+      button { padding: 10px 14px; }
+      #preview { width: 100%; border: 1px solid #ccc; margin-top: 16px; }
+      #logs { background: #111; color: #e7e7e7; padding: 10px; min-height: 140px; white-space: pre-wrap; }
+      .hint { color: #555; font-size: 0.9rem; }
+    </style>
+  </head>
   <body>
-    <h2>Door E-Ink Control</h2>
+    <h2>Statsign Remote Door Sign Controller</h2>
+    <p class="hint">Target BLE peripheral: <strong>{{ device_name }}</strong></p>
 
-    <form method="post" action="/update">
-      <label>Status</label><br/>
-      <select name="status">
-        <option>IN OFFICE</option>
-        <option>TEACHING</option>
-        <option>IN A MEETING</option>
-        <option>DO NOT DISTURB</option>
-        <option>WORKING FROM HOME</option>
-        <option>OUT</option>
-      </select><br/><br/>
+    <label for="status">Status</label>
+    <select id="status">
+      <option>In office</option>
+      <option>In class</option>
+      <option>In a meeting</option>
+      <option>Out</option>
+      <option>WFH</option>
+      <option>Back at &lt;time&gt;</option>
+      <option>Custom</option>
+    </select>
 
-      <label>Back at</label><br/>
-      <input name="back_at" placeholder="2:30 PM" /><br/><br/>
+    <label for="message">Message</label>
+    <input id="message" placeholder="Back at 2:15" value="{{ state.message }}" />
 
-      <label>Note</label><br/>
-      <input name="note" size="40" /><br/><br/>
+    <label for="location">Location</label>
+    <input id="location" placeholder="Library" value="{{ state.location }}" />
 
-      <label>Target</label><br/>
-      <select name="target">
-        <option value="579">5.79" (272x792)</option>
-      </select><br/><br/>
-
-      <button type="submit">Render + Push</button>
-    </form>
+    <div class="buttons">
+      <button onclick="saveStateAndPreview()">Preview</button>
+      <button onclick="pushToSign()">Push to sign</button>
+      <button onclick="clearSign()">Clear sign</button>
+      <button onclick="demoSign()">Demo sign</button>
+    </div>
 
     <h3>Preview</h3>
-    <img src="/preview.png" style="border:1px solid #ccc; max-height:500px;">
+    <img id="preview" src="/preview.png" alt="Sign preview" />
+
+    <h3>Logs</h3>
+    <div id="logs">Ready.</div>
+
+    <script>
+      document.getElementById('status').value = {{ state.status | tojson }};
+
+      async function postJSON(url, body = {}) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        if (!res.ok) {
+          throw new Error(JSON.stringify(data));
+        }
+        return data;
+      }
+
+      function currentState() {
+        return {
+          status: document.getElementById('status').value,
+          message: document.getElementById('message').value,
+          location: document.getElementById('location').value,
+        };
+      }
+
+      function refreshPreview() {
+        document.getElementById('preview').src = `/preview.png?t=${Date.now()}`;
+      }
+
+      function setLogs(lines) {
+        if (Array.isArray(lines)) {
+          document.getElementById('logs').textContent = lines.join('\n');
+        } else {
+          document.getElementById('logs').textContent = String(lines);
+        }
+      }
+
+      async function saveStateAndPreview() {
+        try {
+          await postJSON('/api/state', currentState());
+          refreshPreview();
+          setLogs('State updated.');
+        } catch (err) {
+          setLogs(`Preview failed: ${err.message}`);
+        }
+      }
+
+      async function pushToSign() {
+        try {
+          await postJSON('/api/state', currentState());
+          refreshPreview();
+          const res = await postJSON('/api/push');
+          setLogs(res.logs || ['Push completed']);
+        } catch (err) {
+          setLogs(`Push failed: ${err.message}`);
+        }
+      }
+
+      async function clearSign() {
+        try {
+          const res = await postJSON('/api/clear');
+          setLogs(res.logs || ['Clear command sent']);
+        } catch (err) {
+          setLogs(`Clear failed: ${err.message}`);
+        }
+      }
+
+      async function demoSign() {
+        try {
+          const res = await postJSON('/api/demo');
+          setLogs(res.logs || ['Demo command sent']);
+        } catch (err) {
+          setLogs(`Demo failed: ${err.message}`);
+        }
+      }
+    </script>
   </body>
 </html>
