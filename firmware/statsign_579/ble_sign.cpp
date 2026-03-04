@@ -14,6 +14,13 @@ static size_t gOff = 0;
 static uint32_t gExpectedCrc = 0;
 static bool gTransferring = false;
 
+class ServerCallbacks : public NimBLEServerCallbacks {
+  void onDisconnect(NimBLEServer* /*server*/, NimBLEConnInfo& /*connInfo*/, int /*reason*/) override {
+    NimBLEDevice::startAdvertising();
+    Serial.println("BLE client disconnected; advertising restarted.");
+  }
+};
+
 static void notifyMsg(const String& s) {
   if (!gProg) return;
   gProg->setValue(s.c_str());
@@ -129,6 +136,7 @@ void ble_init(OnFrameReadyFn onFrameReady) {
 
   NimBLEDevice::init(kBleName);
   NimBLEServer* server = NimBLEDevice::createServer();
+  server->setCallbacks(new ServerCallbacks());
 
   NimBLEService* svc = server->createService(kSvcUUID);
 
@@ -149,8 +157,9 @@ void ble_init(OnFrameReadyFn onFrameReady) {
   svc->start();
 
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->setName(kBleName);
   adv->addServiceUUID(kSvcUUID);
   adv->start();
 
-  Serial.println("BLE advertising started.");
+  Serial.printf("BLE advertising started as '%s'.\n", kBleName);
 }
