@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "statsign-server"
 version = "0.1.0"
@@ -10,3 +14,7 @@ dependencies = [
   "pillow",
   "bleak",
 ]
+
+[tool.setuptools]
+py-modules = ["app", "ble_client", "config", "render", "run_server"]
+include-package-data = false
