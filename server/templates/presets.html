@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Statsign Presets</title>
+  <style>
+    body { font-family: sans-serif; max-width: 960px; margin: 24px auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    input, textarea, select { width: 100%; margin-top: 6px; padding: 8px; box-sizing: border-box; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .warning { background: #fff6d5; border: 1px solid #f2ce65; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Preset Manager</h2>
+  <p><a href="/">← Back to controller</a></p>
+  <div class="warning"><strong>Warning:</strong> {{ warning }}</div>
+
+  <h3>Create / update preset</h3>
+  <div class="row">
+    <div>
+      <label>ID (optional for create)</label><input id="id" />
+      <label>Name</label><input id="name" />
+      <label>Status</label><input id="status" />
+      <label>Message</label><textarea id="message"></textarea>
+      <label>Location</label><input id="location" />
+      <label>Return time</label><input id="return_time" />
+    </div>
+    <div>
+      <label>Layout</label><select id="layout"><option>headline</option><option>split</option><option>badge</option></select>
+      <label>Icon ref (builtin:name or upload:file)</label><input id="icon" />
+      <label>Headline size</label><input id="headline_size" type="number" value="86" />
+      <label>Message size</label><input id="message_size" type="number" value="42" />
+      <label>Footer size</label><input id="footer_size" type="number" value="20" />
+    </div>
+  </div>
+  <p>
+    <button onclick="createPreset()">Create</button>
+    <button onclick="updatePreset()">Update by ID</button>
+  </p>
+
+  <h3>Current presets</h3>
+  <table>
+    <thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Layout</th><th>Icon</th><th>Actions</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script>
+    async function fetchJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+      if (!res.ok) throw new Error(JSON.stringify(data));
+      return data;
+    }
+
+    function payload() {
+      return {
+        id: document.getElementById('id').value || null,
+        name: document.getElementById('name').value,
+        status: document.getElementById('status').value,
+        message: document.getElementById('message').value,
+        location: document.getElementById('location').value,
+        return_time: document.getElementById('return_time').value,
+        layout: document.getElementById('layout').value,
+        icon: document.getElementById('icon').value,
+        style: {
+          headline_size: Number(document.getElementById('headline_size').value || 86),
+          message_size: Number(document.getElementById('message_size').value || 42),
+          footer_size: Number(document.getElementById('footer_size').value || 20),
+        },
+      };
+    }
+
+    async function load() {
+      const res = await fetchJSON('/api/presets');
+      const rows = document.getElementById('rows');
+      rows.innerHTML = '';
+      for (const p of res.presets) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${p.id}</td><td>${p.name}</td><td>${p.status || ''}</td><td>${p.layout || ''}</td><td>${p.icon || ''}</td><td><button onclick="fill('${p.id}')">Load</button> <button onclick="delPreset('${p.id}')">Delete</button></td>`;
+        rows.appendChild(tr);
+      }
+      window._presets = res.presets;
+    }
+
+    function fill(id) {
+      const p = (window._presets || []).find(x => x.id === id);
+      if (!p) return;
+      for (const key of ['id','name','status','message','location','return_time','layout','icon']) {
+        document.getElementById(key).value = p[key] || '';
+      }
+      const style = p.style || {};
+      for (const key of ['headline_size','message_size','footer_size']) {
+        document.getElementById(key).value = style[key] || document.getElementById(key).value;
+      }
+    }
+
+    async function createPreset() {
+      await fetchJSON('/api/presets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload()) });
+      await load();
+    }
+
+    async function updatePreset() {
+      const id = document.getElementById('id').value;
+      if (!id) { alert('Set an ID first'); return; }
+      await fetchJSON(`/api/presets/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload()) });
+      await load();
+    }
+
+    async function delPreset(id) {
+      await fetchJSON(`/api/presets/${id}`, { method: 'DELETE' });
+      await load();
+    }
+
+    load();
+  </script>
+</body>
+</html>
