@@ -149,7 +149,7 @@ void setup() {
   );
   NimBLECharacteristic* data = svc->createCharacteristic(
     DATA_UUID,
-    NIMBLE_PROPERTY::WRITE
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
   );
 
   ctrl->setCallbacks(new CtrlCallbacks());
