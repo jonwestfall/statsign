@@ -36,6 +36,7 @@ FB_LEN = (W * H) // 8
 CHUNK_SIZE = 180
 ACK_EVERY = 2048
 ACK_TIMEOUT_S = 6.0
+WRITE_WITH_RESPONSE = True
 
 
 @dataclass
@@ -45,6 +46,12 @@ class Progress:
     crc_ok: bool = False
     ready: bool = False
     last_msg: str = ""
+
+
+async def _wait_for_ack(progress: Progress, sent: int):
+    """Wait until firmware ACKs at least the number of bytes already sent."""
+    while progress.last_ack < sent:
+        await asyncio.sleep(0.01)
 
 
 def render_calibration_image(w: int, h: int) -> Image.Image:
@@ -142,7 +149,6 @@ async def push_frame(payload: bytes):
 
     progress = Progress()
 
-    ack_event = asyncio.Event()
     done_event = asyncio.Event()
 
     def on_prog(_, data: bytearray):
@@ -156,7 +162,6 @@ async def push_frame(payload: bytes):
         elif msg.startswith("ACK "):
             try:
                 progress.last_ack = int(msg.split()[1])
-                ack_event.set()
             except Exception:
                 pass
         elif msg == "CRCOK":
@@ -169,7 +174,6 @@ async def push_frame(payload: bytes):
 
     async with BleakClient(dev) as client:
         print("Connecting...")
-        await client.connect()
         print("Connected.")
 
         print("Subscribing to progress notifications...")
@@ -183,24 +187,29 @@ async def push_frame(payload: bytes):
         while not progress.ready and (time.time() - t0) < 2.0:
             await asyncio.sleep(0.05)
 
-        print(f"Streaming {len(payload)} bytes...")
+        max_wwr = client.services.get_characteristic(DATA_UUID).max_write_without_response_size
+        chunk_size = min(CHUNK_SIZE, max_wwr if max_wwr else CHUNK_SIZE)
+        print(
+            f"Streaming {len(payload)} bytes "
+            f"(chunk={chunk_size}, write_with_response={WRITE_WITH_RESPONSE})..."
+        )
         sent = 0
         last_ack_check = 0
 
         while sent < len(payload):
-            chunk = payload[sent:sent + CHUNK_SIZE]
-            await client.write_gatt_char(DATA_UUID, chunk, response=False)
+            chunk = payload[sent:sent + chunk_size]
+            await client.write_gatt_char(DATA_UUID, chunk, response=WRITE_WITH_RESPONSE)
             sent += len(chunk)
 
             # Backpressure: wait for ACK occasionally
             if sent - progress.last_ack >= ACK_EVERY:
-                ack_event.clear()
                 try:
-                    await asyncio.wait_for(ack_event.wait(), timeout=ACK_TIMEOUT_S)
+                    await asyncio.wait_for(_wait_for_ack(progress, sent), timeout=ACK_TIMEOUT_S)
                 except asyncio.TimeoutError:
-                    # If ACKs are missing, fall back to slower mode occasionally
-                    # (this nudges macOS BLE stacks that sometimes stall).
-                    await client.write_gatt_char(DATA_UUID, b"", response=True)
+                    raise RuntimeError(
+                        f"Timed out waiting for ACK near offset {sent}. "
+                        f"Last message: {progress.last_msg!r}"
+                    )
 
             # Optional: print basic progress every ~4KB
             if sent - last_ack_check >= 4096:
