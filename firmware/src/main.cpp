@@ -158,10 +158,12 @@ void setup() {
   svc->start();
 
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->setName(DEV_NAME);
+  adv->setScanResponse(true);
   adv->addServiceUUID(SVC_UUID);
   adv->start();
 
-  Serial.println("BLE ready.");
+  Serial.printf("BLE ready and advertising as '%s'.\n", DEV_NAME);
 }
 
 void loop() {
