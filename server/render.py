@@ -52,7 +52,8 @@ def _wrap_with_ellipsis(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.Im
 
 
 def _fit_font(draw: ImageDraw.ImageDraw, text: str, start_size: int, min_size: int, max_width: int, ttf_path: str, font_family: str) -> ImageFont.ImageFont:
-    for size in range(start_size, min_size - 1, -2):
+    min_size = min(min_size, start_size)
+    for size in range(start_size, min_size - 1, -1):
         font = _load_font(size, ttf_path, font_family)
         if draw.textlength(text, font=font) <= max_width:
             return font

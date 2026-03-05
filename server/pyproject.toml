@@ -16,5 +16,5 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["app", "assets", "ble_client", "config", "presets", "render", "run_server"]
+py-modules = ["app", "assets", "ble_client", "config", "presets", "render", "run_server", "schedule"]
 include-package-data = false

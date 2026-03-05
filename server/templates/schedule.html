@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Statsign Scheduler</title>
+  <style>
+    body { font-family: sans-serif; max-width: 1200px; margin: 24px auto; }
+    .grid { display:grid; grid-template-columns: 1.2fr 1fr; gap:16px; }
+    label { display:block; margin-top:8px; font-weight:600; }
+    input, select, textarea, button { width:100%; padding:8px; box-sizing:border-box; }
+    .row { display:flex; gap:8px; }
+    .row > * { flex:1; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { border-bottom:1px solid #ddd; padding:6px; text-align:left; }
+  </style>
+</head>
+<body>
+  <h2>Schedule</h2>
+  <p><a href="/">Back to controller</a></p>
+  <div class="grid">
+    <section>
+      <h3>Items</h3>
+      <table>
+        <thead><tr><th>Name</th><th>Type</th><th>Enabled</th><th>Priority</th><th>Actions</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <h3>Active</h3>
+      <pre id="active"></pre>
+    </section>
+    <section>
+      <h3>Create schedule item</h3>
+      <label>Name</label><input id="name" />
+      <div class="row">
+        <div><label>Type</label><select id="type"><option>one_time</option><option>recurring</option><option>timed_override</option><option>sequence</option></select></div>
+        <div><label>Timezone</label><input id="timezone" value="{{ default_timezone }}" /></div>
+        <div><label>Priority</label><input id="priority" type="number" value="0" /></div>
+      </div>
+      <div class="row">
+        <div><label>Start at (ISO)</label><input id="start_at" /></div>
+        <div><label>End at (ISO optional)</label><input id="end_at" /></div>
+      </div>
+      <h4>Recurrence</h4>
+      <div class="row">
+        <div><label>Freq</label><select id="freq"><option value="">(none)</option><option>daily</option><option>weekly</option><option>monthly</option></select></div>
+        <div><label>Interval</label><input id="interval" type="number" value="1" /></div>
+        <div><label>Weekdays (0-6 csv)</label><input id="byweekday" placeholder="0,1,2" /></div>
+      </div>
+      <div class="row">
+        <div><label>By hour</label><input id="byhour" type="number" min="0" max="23" /></div>
+        <div><label>By minute</label><input id="byminute" type="number" min="0" max="59" /></div>
+        <div><label>Until ISO</label><input id="until" /></div>
+      </div>
+      <h4>Payload</h4>
+      <label>Payload kind</label><select id="payloadKind" onchange="togglePayload()"><option value="preset">Preset</option><option value="state">Custom state</option><option value="image">Image ref</option><option value="sequence">Sequence payload</option></select>
+      <div id="presetBox"><label>Preset</label><select id="preset_id">{% for p in presets %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></div>
+      <div id="imageBox" style="display:none"><label>Image ref</label><select id="image_ref">{% for icon in builtin_icons %}<option value="builtin:{{icon}}">builtin:{{icon}}</option>{% endfor %}{% for f in uploads %}<option value="upload:{{f}}">upload:{{f}}</option>{% endfor %}</select></div>
+      <div id="stateBox" style="display:none">
+        <label>Status</label><input id="status" />
+        <label>Message</label><textarea id="message"></textarea>
+        <div class="row"><div><label>Layout</label><select id="layout"><option>headline</option><option>split</option><option>badge</option><option>designer</option></select></div><div><label>Icon</label><input id="icon" /></div><div><label>Image</label><input id="image" /></div></div>
+        <div class="row"><div><label>Headline size</label><input id="headline_size" type="number" value="86" /></div><div><label>Message size</label><input id="message_size" type="number" value="42" /></div></div>
+      </div>
+      <div id="sequenceBox" style="display:none">
+        <label>First payload preset id</label><input id="seq_first_preset" />
+        <label>First duration minutes</label><input id="seq_first_minutes" type="number" value="5" />
+        <label>Second payload preset id</label><input id="seq_second_preset" />
+      </div>
+      <div class="row" style="margin-top:12px;"><button onclick="createItem()">Create item</button><button onclick="runNow()">Run now for minutes</button></div>
+      <div class="row"><div><label>Run-now minutes</label><input id="run_now_minutes" type="number" value="10" /></div></div>
+    </section>
+  </div>
+<script>
+const byId = (id) => document.getElementById(id);
+const nowIso = () => new Date().toISOString().slice(0,16);
+byId('start_at').value = new Date().toISOString();
+
+function togglePayload(){
+  const k = byId('payloadKind').value;
+  byId('presetBox').style.display = k==='preset' ? 'block' : 'none';
+  byId('stateBox').style.display = k==='state' ? 'block' : 'none';
+  byId('imageBox').style.display = k==='image' ? 'block' : 'none';
+  byId('sequenceBox').style.display = k==='sequence' ? 'block' : 'none';
+}
+
+function buildPayload(){
+  const k = byId('payloadKind').value;
+  if (k==='preset') return {preset_id: byId('preset_id').value};
+  if (k==='image') return {image_ref: byId('image_ref').value};
+  if (k==='sequence') return {first_minutes: Number(byId('seq_first_minutes').value||5), first:{preset_id: byId('seq_first_preset').value}, second:{preset_id: byId('seq_second_preset').value}};
+  return {state: {
+    status: byId('status').value, message: byId('message').value, location:'', return_time:'', layout: byId('layout').value, icon: byId('icon').value, image: byId('image').value, variables:{},
+    style: {headline_size:Number(byId('headline_size').value||86), message_size:Number(byId('message_size').value||42), footer_size:20, alignment:'left', padding:18, invert:false, show_updated_timestamp:true, show_border:true, debug_boxes:false, icon_dither:true}
+  }};
+}
+
+async function fetchJSON(url, options={}){ const r=await fetch(url, options); const d=await r.json(); if(!r.ok) throw new Error(JSON.stringify(d)); return d; }
+
+async function refresh(){
+  const list = await fetchJSON('/api/schedule');
+  byId('rows').innerHTML = '';
+  for(const item of list.items){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${item.name}</td><td>${item.type}</td><td>${item.enabled}</td><td>${item.priority}</td><td><button onclick="toggle('${item.id}', ${item.enabled ? 'false':'true'})">${item.enabled?'Disable':'Enable'}</button> <button onclick="delItem('${item.id}')">Delete</button> <button onclick="runItemNow('${item.id}')">Run now</button></td>`;
+    byId('rows').appendChild(tr);
+  }
+  const active = await fetchJSON('/api/schedule/active');
+  byId('active').textContent = JSON.stringify(active, null, 2);
+}
+
+async function createItem(){
+  const rec = byId('freq').value ? {
+    freq: byId('freq').value,
+    interval: Number(byId('interval').value||1),
+    byweekday: byId('byweekday').value ? byId('byweekday').value.split(',').map(v => Number(v.trim())).filter(v => !Number.isNaN(v)) : [],
+    byhour: byId('byhour').value ? Number(byId('byhour').value) : null,
+    byminute: byId('byminute').value ? Number(byId('byminute').value) : null,
+    until: byId('until').value || null,
+  } : null;
+  await fetchJSON('/api/schedule', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+    enabled:true, name:byId('name').value || `item-${Date.now()}`, type:byId('type').value, timezone:byId('timezone').value, priority:Number(byId('priority').value||0),
+    start_at:byId('start_at').value, end_at:byId('end_at').value || null, recurrence:rec, payload:buildPayload(), notes:''
+  })});
+  await refresh();
+}
+
+async function runNow(){
+  await fetchJSON('/api/schedule/run-now', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({minutes:Number(byId('run_now_minutes').value||10), timezone:byId('timezone').value, payload:buildPayload()})});
+  await refresh();
+}
+async function toggle(id, enabled){ await fetchJSON(`/api/schedule/${id}/${enabled ? 'enable':'disable'}`, {method:'POST'}); await refresh(); }
+async function delItem(id){ await fetchJSON(`/api/schedule/${id}`, {method:'DELETE'}); await refresh(); }
+async function runItemNow(id){
+  const list = await fetchJSON('/api/schedule');
+  const item = list.items.find(x => x.id===id);
+  await fetchJSON('/api/schedule/run-now', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({minutes:Number(byId('run_now_minutes').value||10), timezone:item.timezone, payload:item.payload, name:`Quick ${item.name}`})});
+  await refresh();
+}
+
+refresh();
+</script>
+</body>
+</html>

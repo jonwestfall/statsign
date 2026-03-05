@@ -20,7 +20,7 @@
   </head>
   <body>
     <h2>Statsign Controller</h2>
-    <p>BLE target: <strong>{{ device_name }}</strong> · <a href="/presets">Edit presets</a></p>
+    <p>BLE target: <strong>{{ device_name }}</strong> · <a href="/presets">Edit presets</a> · <a href="/schedule">Scheduling</a></p>
     <div class="grid">
       <section>
         <label>Preset</label>
@@ -130,26 +130,30 @@
         for (const k of ['invert','show_updated_timestamp','show_border','debug_boxes','icon_dither']) document.getElementById(k).checked = !!st[k];
       }
 
+      const byId = (id) => document.getElementById(id);
+
       function statePayload() {
         return {
-          status: status.value, message: message.value, location: location.value, return_time: return_time.value,
-          layout: layout.value, icon: icon.value, image: image.value,
-          variables: { location: location.value, return_time: return_time.value },
+          status: byId("status").value, message: byId("message").value, location: byId("location").value, return_time: byId("return_time").value,
+          layout: byId("layout").value, icon: byId("icon").value, image: byId("image").value,
+          variables: { location: byId("location").value, return_time: byId("return_time").value },
           style: {
-            headline_size: Number(headline_size.value || 86), message_size: Number(message_size.value || 42), footer_size: Number(footer_size.value || 20),
-            alignment: alignment.value, padding: Number(padding.value || 18), invert: invert.checked,
-            show_updated_timestamp: show_updated_timestamp.checked, show_border: show_border.checked,
-            debug_boxes: debug_boxes.checked, icon_dither: icon_dither.checked,
+            headline_size: Number(byId("headline_size").value || 86), message_size: Number(byId("message_size").value || 42), footer_size: Number(byId("footer_size").value || 20),
+            alignment: byId("alignment").value, padding: Number(byId("padding").value || 18), invert: byId("invert").checked,
+            show_updated_timestamp: byId("show_updated_timestamp").checked, show_border: byId("show_border").checked,
+            debug_boxes: byId("debug_boxes").checked, icon_dither: byId("icon_dither").checked,
           },
         };
       }
 
       async function loadPresets() {
         const res = await fetchJSON('/api/presets');
+        const presetSelect = byId("presetSelect");
         presetSelect.innerHTML = '<option value="">(select preset)</option>';
         for (const p of res.presets) presetSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
       }
       async function applyPreset() {
+        const presetSelect = byId("presetSelect");
         if (!presetSelect.value) return;
         const res = await fetchJSON(`/api/presets/${presetSelect.value}/apply`, { method:'POST' });
         hydrate(res.state); toggleDesigner(); refreshPreview(); log(`Applied ${presetSelect.value}`);
@@ -164,19 +168,19 @@
       async function demoSign() { try { const r = await fetchJSON('/api/demo', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); log(r.logs || ['Demo sent']); } catch(e){log(e.message);} }
 
       function toggleDesigner() {
-        const on = layout.value === 'designer';
-        designerWrap.style.display = on ? 'block' : 'none';
+        const on = byId("layout").value === 'designer';
+        byId("designerWrap").style.display = on ? 'block' : 'none';
       }
 
       function drawDesigner() {
-        dCtx.fillStyle = invert.checked ? '#000' : '#fff';
+        dCtx.fillStyle = byId("invert").checked ? '#000' : '#fff';
         dCtx.fillRect(0,0,800,272);
-        dCtx.fillStyle = invert.checked ? '#fff' : '#000';
-        dCtx.font = `${Number(d_title_size.value || 84)}px sans-serif`;
-        dCtx.fillText(d_text.value || '', Number(d_x.value || 20), Number(d_y.value || 90));
-        dCtx.font = `${Number(d_sub_size.value || 42)}px sans-serif`;
-        dCtx.fillText(d_subtext.value || '', Number(d_x.value || 20), Number(d_y.value || 90) + Number(d_sub_size.value || 42) + 14);
-        if (show_border.checked) { dCtx.strokeStyle = invert.checked ? '#fff' : '#000'; dCtx.strokeRect(1,1,798,270); }
+        dCtx.fillStyle = byId("invert").checked ? '#fff' : '#000';
+        dCtx.font = `${Number(byId("d_title_size").value || 84)}px sans-serif`;
+        dCtx.fillText(byId("d_text").value || '', Number(byId("d_x").value || 20), Number(byId("d_y").value || 90));
+        dCtx.font = `${Number(byId("d_sub_size").value || 42)}px sans-serif`;
+        dCtx.fillText(byId("d_subtext").value || '', Number(byId("d_x").value || 20), Number(byId("d_y").value || 90) + Number(byId("d_sub_size").value || 42) + 14);
+        if (byId("show_border").checked) { dCtx.strokeStyle = byId("invert").checked ? '#fff' : '#000'; dCtx.strokeRect(1,1,798,270); }
       }
 
       async function uploadDesignerImage() {
@@ -186,19 +190,19 @@
         const res = await fetchJSON('/api/upload', { method:'POST', headers:{'Content-Type':'image/png','X-Filename':'designer.png'}, body: await blob.arrayBuffer() });
         const ref = res.image || res.icon;
         const opt = `<option value="${ref}">${ref}</option>`;
-        image.innerHTML += opt; icon.innerHTML += opt;
-        image.value = ref; icon.value = ref; layout.value = 'designer'; toggleDesigner();
+        byId("image").innerHTML += opt; byId("icon").innerHTML += opt;
+        byId("image").value = ref; byId("icon").value = ref; byId("layout").value = 'designer'; toggleDesigner();
         await saveStateAndPreview();
         log(`Designer image uploaded: ${res.filename}`);
       }
 
-      uploadFile.addEventListener('change', async (e) => {
+      byId("uploadFile").addEventListener('change', async (e) => {
         const file = e.target.files[0]; if (!file) return;
         const res = await fetchJSON('/api/upload', { method:'POST', headers:{'Content-Type': file.type || 'image/png', 'X-Filename': file.name}, body: await file.arrayBuffer() });
         const ref = res.image || res.icon;
-        icon.innerHTML += `<option value="${ref}">${ref}</option>`;
-        image.innerHTML += `<option value="${ref}">${ref}</option>`;
-        icon.value = ref; image.value = ref; log(`Uploaded ${res.filename}`);
+        byId("icon").innerHTML += `<option value="${ref}">${ref}</option>`;
+        byId("image").innerHTML += `<option value="${ref}">${ref}</option>`;
+        byId("icon").value = ref; byId("image").value = ref; log(`Uploaded ${res.filename}`);
       });
 
       hydrate(INITIAL_STATE); loadPresets(); toggleDesigner(); drawDesigner();
