@@ -29,6 +29,7 @@
         <div class="row" style="margin-top:8px;">
           <input id="presetName" placeholder="Preset name (for Save as Preset)" />
           <button onclick="saveAsPreset()">Save as Preset</button>
+          <button onclick="clearFormToDefaults()">Clear</button>
         </div>
 
         <label>Status</label><input id="status" />
@@ -77,6 +78,9 @@
           <label><input id="show_border" type="checkbox" /> Show border</label>
           <label><input id="debug_boxes" type="checkbox" /> Debug boxes</label>
           <label><input id="icon_dither" type="checkbox" /> Dither</label>
+          <div class="row" style="margin-top:8px;">
+            <button type="button" onclick="saveAdvancedDefaults()">Save defaults</button>
+          </div>
         </details>
       </section>
 
@@ -128,6 +132,37 @@
       const dCanvas = document.getElementById('designerCanvas');
       const dCtx = dCanvas.getContext('2d');
       let loadedPresetId = null;
+      const BASE_DEFAULT_STATE = {
+        status: 'In office',
+        message: '',
+        location: '',
+        return_time: '',
+        layout: 'headline',
+        icon: '',
+        image: '',
+        variables: {},
+        style: {
+          headline_size: 86,
+          message_size: 42,
+          footer_size: 20,
+          alignment: 'left',
+          padding: 18,
+          invert: false,
+          show_updated_timestamp: true,
+          show_border: true,
+          debug_boxes: false,
+          icon_dither: true,
+        },
+      };
+      const DESIGNER_DEFAULTS = {
+        d_text: 'In a meeting',
+        d_subtext: 'Back at 2:30 PM',
+        d_x: 30,
+        d_y: 90,
+        d_title_size: 84,
+        d_sub_size: 42,
+      };
+      const ADVANCED_DEFAULTS_KEY = 'statsign_advanced_defaults_v1';
 
       const log = (m) => document.getElementById('logs').textContent = Array.isArray(m) ? m.join('\n') : String(m);
       const refreshPreview = () => document.getElementById('preview').src = `/preview.png?t=${Date.now()}`;
@@ -149,6 +184,63 @@
 
       const byId = (id) => document.getElementById(id);
 
+
+      function getAdvancedControlValues() {
+        return {
+          headline_size: Number(byId('headline_size').value || 86),
+          message_size: Number(byId('message_size').value || 42),
+          footer_size: Number(byId('footer_size').value || 20),
+          alignment: byId('alignment').value || 'left',
+          padding: Number(byId('padding').value || 18),
+          invert: byId('invert').checked,
+          show_updated_timestamp: byId('show_updated_timestamp').checked,
+          show_border: byId('show_border').checked,
+          debug_boxes: byId('debug_boxes').checked,
+          icon_dither: byId('icon_dither').checked,
+        };
+      }
+
+      function getSavedAdvancedDefaults() {
+        try {
+          const raw = window.localStorage.getItem(ADVANCED_DEFAULTS_KEY);
+          if (!raw) return { ...BASE_DEFAULT_STATE.style };
+          const parsed = JSON.parse(raw);
+          return { ...BASE_DEFAULT_STATE.style, ...parsed };
+        } catch (_) {
+          return { ...BASE_DEFAULT_STATE.style };
+        }
+      }
+
+      function applyAdvancedControls(style) {
+        const merged = { ...BASE_DEFAULT_STATE.style, ...(style || {}) };
+        for (const key of ['headline_size', 'message_size', 'footer_size', 'alignment', 'padding']) {
+          if (byId(key)) byId(key).value = merged[key];
+        }
+        for (const key of ['invert', 'show_updated_timestamp', 'show_border', 'debug_boxes', 'icon_dither']) {
+          if (byId(key)) byId(key).checked = !!merged[key];
+        }
+      }
+
+      function saveAdvancedDefaults() {
+        const advanced = getAdvancedControlValues();
+        window.localStorage.setItem(ADVANCED_DEFAULTS_KEY, JSON.stringify(advanced));
+        log('Saved advanced defaults.');
+      }
+
+      function clearFormToDefaults() {
+        loadedPresetId = null;
+        byId('presetSelect').value = '';
+        byId('presetName').value = '';
+        hydrate(BASE_DEFAULT_STATE);
+        applyAdvancedControls(getSavedAdvancedDefaults());
+        for (const [key, value] of Object.entries(DESIGNER_DEFAULTS)) {
+          if (byId(key)) byId(key).value = value;
+        }
+        toggleDesigner();
+        drawDesigner();
+        saveStateAndPreview();
+        log('Form reset to defaults.');
+      }
       function statePayload() {
         return {
           status: byId("status").value, message: byId("message").value, location: byId("location").value, return_time: byId("return_time").value,
