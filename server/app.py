@@ -11,7 +11,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from zoneinfo import ZoneInfo
 
 from assets import list_builtin_icons
 from ble_client import BleSignClient
@@ -24,6 +23,7 @@ from schedule import (
     ScheduleStore,
     get_active_item,
     get_next_change_time,
+    get_timezone,
 )
 
 settings: Settings = load_settings()
@@ -105,17 +105,17 @@ async def _apply_state_and_push(new_state: SignState, item_id: str | None, reaso
 
         state = new_state
         _save_state()
-        last_push_at = datetime.now(tz=ZoneInfo(settings.default_timezone)).isoformat(timespec="seconds")
+        last_push_at = datetime.now(tz=get_timezone(settings.default_timezone)).isoformat(timespec="seconds")
         last_error = None
         signature = f"{item_id or 'manual'}:{json.dumps(state_to_dict(new_state), sort_keys=True)}"
         current_applied_signature = signature
-        schedule_store.mark_last_applied(item_id, datetime.now(tz=ZoneInfo(settings.default_timezone)))
+        schedule_store.mark_last_applied(item_id, datetime.now(tz=get_timezone(settings.default_timezone)))
         return {"ok": True, "logs": result.logs, "bytes": len(framebuffer), "reason": reason}
 
 
 async def _scheduler_loop() -> None:
     global scheduler_backoff_until
-    tz = ZoneInfo(settings.default_timezone)
+    tz = get_timezone(settings.default_timezone)
     while True:
         now = datetime.now(tz=tz)
         if scheduler_backoff_until and now < scheduler_backoff_until:
@@ -370,7 +370,7 @@ async def disable_schedule(item_id: str):
 
 @app.get("/api/schedule/active")
 async def schedule_active():
-    now = datetime.now(tz=ZoneInfo(settings.default_timezone))
+    now = datetime.now(tz=get_timezone(settings.default_timezone))
     items = schedule_store.list_items()
     active = get_active_item(items, now=now, default_tz=settings.default_timezone)
     nxt = get_next_change_time(items, now=now, default_tz=settings.default_timezone)
@@ -388,7 +388,7 @@ async def schedule_active():
 async def schedule_run_now(payload: dict):
     minutes = int(payload.get("minutes", 10))
     timezone = payload.get("timezone") or settings.default_timezone
-    now = datetime.now(tz=ZoneInfo(timezone))
+    now = datetime.now(tz=get_timezone(timezone, settings.default_timezone))
     end = now + timedelta(minutes=minutes)
     item = schedule_store.create(
         ScheduleItemInput(

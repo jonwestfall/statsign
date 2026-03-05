@@ -8,9 +8,22 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TZ = "America/Chicago"
+
+
+def get_timezone(name: str | None, fallback: str = DEFAULT_TZ) -> ZoneInfo:
+    """Return a ZoneInfo, falling back to UTC if tzdata is unavailable."""
+    candidates = [name, fallback, "UTC"]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            return ZoneInfo(candidate)
+        except ZoneInfoNotFoundError:
+            continue
+    return ZoneInfo("UTC")
 
 
 class RecurrenceInput(BaseModel):
@@ -118,15 +131,15 @@ class ScheduleStore:
 def parse_dt(value: str, timezone: str = DEFAULT_TZ) -> datetime:
     dt = datetime.fromisoformat(value)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo(timezone))
+        dt = dt.replace(tzinfo=get_timezone(timezone))
     return dt
 
 
 def _normalize_now(now: datetime | None, timezone: str) -> datetime:
     if now is None:
-        return datetime.now(ZoneInfo(timezone))
+        return datetime.now(get_timezone(timezone))
     if now.tzinfo is None:
-        return now.replace(tzinfo=ZoneInfo(timezone))
+        return now.replace(tzinfo=get_timezone(timezone))
     return now
 
 
@@ -216,7 +229,7 @@ def _sequence_window(item: ScheduleItem) -> tuple[datetime, datetime] | None:
 
 
 def _item_window(item: ScheduleItem, now: datetime) -> tuple[datetime, datetime | None, dict[str, Any] | None] | None:
-    tz_now = now.astimezone(ZoneInfo(item.timezone))
+    tz_now = now.astimezone(get_timezone(item.timezone))
     if item.type in {"one_time", "timed_override"}:
         start = parse_dt(item.start_at, item.timezone)
         end = parse_dt(item.end_at, item.timezone) if item.end_at else None
@@ -274,7 +287,7 @@ def get_active_item(items: list[ScheduleItem], now: datetime | None = None, defa
 
 
 def _next_start(item: ScheduleItem, now: datetime) -> datetime | None:
-    tz_now = now.astimezone(ZoneInfo(item.timezone))
+    tz_now = now.astimezone(get_timezone(item.timezone))
     if item.type in {"one_time", "timed_override", "sequence"}:
         start = parse_dt(item.start_at, item.timezone)
         return start if start > tz_now else None
