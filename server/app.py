@@ -390,13 +390,14 @@ async def schedule_run_now(payload: dict):
     timezone = payload.get("timezone") or settings.default_timezone
     now = datetime.now(tz=get_timezone(timezone, settings.default_timezone))
     end = now + timedelta(minutes=minutes)
+    priority = int(payload.get("priority", 1000))
     item = schedule_store.create(
         ScheduleItemInput(
             enabled=True,
             name=payload.get("name") or f"Run now {now.isoformat(timespec='minutes')}",
             type="timed_override",
             timezone=timezone,
-            priority=int(payload.get("priority", 1000)),
+            priority=priority,
             start_at=now.isoformat(),
             end_at=end.isoformat(),
             recurrence=None,
@@ -404,4 +405,41 @@ async def schedule_run_now(payload: dict):
             notes=payload.get("notes"),
         )
     )
-    return {"ok": True, "item": item.model_dump()}
+    revert_mode = str(payload.get("revert_mode") or "schedule")
+    revert_item = None
+    if revert_mode in {"previous", "preset"}:
+        revert_payload: dict | None = None
+        if revert_mode == "previous":
+            # Last known displayed state prior to the override.
+            revert_payload = {"state": state_to_dict(state)}
+        elif revert_mode == "preset":
+            revert_preset_id = payload.get("revert_preset_id")
+            if not revert_preset_id:
+                raise HTTPException(status_code=400, detail="revert_preset_id is required when revert_mode='preset'")
+            try:
+                _ = preset_store.get(revert_preset_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="Revert preset not found") from exc
+            revert_payload = {"preset_id": revert_preset_id}
+
+        revert_item = schedule_store.create(
+            ScheduleItemInput(
+                enabled=True,
+                name=f"Revert for {item.id}",
+                type="one_time",
+                timezone=timezone,
+                priority=int(payload.get("revert_priority", max(0, priority - 1))),
+                start_at=end.isoformat(),
+                end_at=None,
+                recurrence=None,
+                payload=revert_payload or {},
+                notes=f"Auto-created revert target ({revert_mode})",
+            )
+        )
+
+    return {
+        "ok": True,
+        "item": item.model_dump(),
+        "revert_item": revert_item.model_dump() if revert_item else None,
+        "revert_mode": revert_mode,
+    }

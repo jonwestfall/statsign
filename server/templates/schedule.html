@@ -67,6 +67,20 @@
       </div>
       <div class="row" style="margin-top:12px;"><button onclick="createItem()">Create item</button><button onclick="runNow()">Run now for minutes</button></div>
       <div class="row"><div><label>Run-now minutes</label><input id="run_now_minutes" type="number" value="10" /></div></div>
+      <div class="row">
+        <div>
+          <label>After timed override ends</label>
+          <select id="revert_mode" onchange="toggleRevertMode()">
+            <option value="schedule">Return to normal schedule</option>
+            <option value="previous">Revert to previous screen content</option>
+            <option value="preset">Switch to preset</option>
+          </select>
+        </div>
+        <div id="revertPresetWrap" style="display:none">
+          <label>Revert preset</label>
+          <select id="revert_preset_id">{% for p in presets %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select>
+        </div>
+      </div>
     </section>
   </div>
 <script>
@@ -80,6 +94,10 @@ function togglePayload(){
   byId('stateBox').style.display = k==='state' ? 'block' : 'none';
   byId('imageBox').style.display = k==='image' ? 'block' : 'none';
   byId('sequenceBox').style.display = k==='sequence' ? 'block' : 'none';
+}
+
+function toggleRevertMode(){
+  byId('revertPresetWrap').style.display = byId('revert_mode').value === 'preset' ? 'block' : 'none';
 }
 
 function buildPayload(){
@@ -124,7 +142,9 @@ async function createItem(){
 }
 
 async function runNow(){
-  await fetchJSON('/api/schedule/run-now', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({minutes:Number(byId('run_now_minutes').value||10), timezone:byId('timezone').value, payload:buildPayload()})});
+  const body = {minutes:Number(byId('run_now_minutes').value||10), timezone:byId('timezone').value, payload:buildPayload(), revert_mode: byId('revert_mode').value};
+  if (body.revert_mode === 'preset') body.revert_preset_id = byId('revert_preset_id').value;
+  await fetchJSON('/api/schedule/run-now', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   await refresh();
 }
 async function toggle(id, enabled){ await fetchJSON(`/api/schedule/${id}/${enabled ? 'enable':'disable'}`, {method:'POST'}); await refresh(); }
@@ -136,6 +156,7 @@ async function runItemNow(id){
   await refresh();
 }
 
+toggleRevertMode();
 refresh();
 </script>
 </body>
