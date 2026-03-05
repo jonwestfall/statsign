@@ -39,6 +39,8 @@ class Settings:
     presets_file: Path = Path("server/data/presets.json")
     uploads_dir: Path = Path("server/data/uploads")
     builtins_dir: Path = Path("server/assets/icons")
+    schedule_file: Path = Path("server/data/schedule.json")
+    default_timezone: str = "America/Chicago"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -74,4 +76,6 @@ def load_settings() -> Settings:
         presets_file=Path(os.getenv("STATSIGN_PRESETS_FILE", str(data_dir / "presets.json"))),
         uploads_dir=Path(os.getenv("STATSIGN_UPLOADS_DIR", str(data_dir / "uploads"))),
         builtins_dir=Path(os.getenv("STATSIGN_BUILTIN_ICONS_DIR", str(server_dir / "assets" / "icons"))),
+        schedule_file=Path(os.getenv("STATSIGN_SCHEDULE_FILE", str(data_dir / "schedule.json"))),
+        default_timezone=os.getenv("STATSIGN_DEFAULT_TIMEZONE", "America/Chicago"),
     )
