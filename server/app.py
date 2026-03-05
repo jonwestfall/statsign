@@ -3,16 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import secrets
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from assets import list_builtin_icons
+from auth import AuthTokenStore
 from ble_client import BleSignClient
 from config import Settings, load_settings
 from presets import PresetInput, PresetStore, SignState, StateInput, state_from_dict, state_to_dict
@@ -33,6 +35,7 @@ ble = BleSignClient(settings)
 push_lock = asyncio.Lock()
 preset_store = PresetStore(settings.presets_file)
 schedule_store = ScheduleStore(settings.schedule_file)
+auth_store = AuthTokenStore(settings.auth_tokens_file)
 
 settings.uploads_dir.mkdir(parents=True, exist_ok=True)
 settings.builtins_dir.mkdir(parents=True, exist_ok=True)
@@ -44,6 +47,38 @@ last_push_at: str | None = None
 last_error: str | None = None
 scheduler_backoff_until: datetime | None = None
 current_applied_signature: str | None = None
+
+
+def _load_or_create_ui_bootstrap_token() -> str:
+    if settings.ui_bootstrap_file.exists():
+        token = settings.ui_bootstrap_file.read_text(encoding="utf-8").strip()
+        if token:
+            return token
+    token = f"stsgn_ui_{secrets.token_urlsafe(24)}"
+    settings.ui_bootstrap_file.parent.mkdir(parents=True, exist_ok=True)
+    settings.ui_bootstrap_file.write_text(token, encoding="utf-8")
+    return token
+
+
+ui_bootstrap_token = _load_or_create_ui_bootstrap_token()
+
+
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    kind, _, value = authorization.partition(" ")
+    if kind.lower() != "bearer" or not value:
+        return None
+    return value.strip()
+
+
+def require_api_token(authorization: str | None = Header(default=None)) -> str:
+    token = _extract_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+    if secrets.compare_digest(token, ui_bootstrap_token) or auth_store.verify(token):
+        return token
+    raise HTTPException(status_code=401, detail="Invalid API token")
 
 
 def _write_atomic_json(path: Path, payload: dict) -> None:
@@ -159,6 +194,7 @@ async def index(request: Request):
             "device_name": settings.ble_device_name,
             "builtin_icons": list_builtin_icons(settings.builtins_dir),
             "uploads": _upload_files(),
+            "api_token": ui_bootstrap_token,
         },
     )
 
@@ -173,13 +209,21 @@ async def schedule_page(request: Request):
             "uploads": _upload_files(),
             "builtin_icons": list_builtin_icons(settings.builtins_dir),
             "default_timezone": settings.default_timezone or DEFAULT_TZ,
+            "api_token": ui_bootstrap_token,
         },
     )
 
 
 @app.get("/presets", response_class=HTMLResponse)
 async def presets_page(request: Request):
-    return templates.TemplateResponse("presets.html", {"request": request, "warning": "MVP: no authentication enabled."})
+    return templates.TemplateResponse(
+        "presets.html",
+        {
+            "request": request,
+            "warning": "API endpoints require Bearer tokens. Generate remote tokens from the main controller page.",
+            "api_token": ui_bootstrap_token,
+        },
+    )
 
 
 @app.get("/preview.png")
@@ -196,7 +240,7 @@ async def preview_png():
 
 
 @app.get("/api/render-test")
-async def render_test(headline_size: int = 86, message_size: int = 42):
+async def render_test(headline_size: int = 86, message_size: int = 42, _token: str = Depends(require_api_token)):
     probe = state_from_dict(state_to_dict(state))
     probe.style.headline_size = headline_size
     probe.style.message_size = message_size
@@ -215,12 +259,12 @@ async def health():
 
 
 @app.get("/api/state")
-async def get_state():
+async def get_state(_token: str = Depends(require_api_token)):
     return {"ok": True, "state": state_to_dict(state)}
 
 
 @app.post("/api/state")
-async def set_state(payload: StateInput):
+async def set_state(payload: StateInput, _token: str = Depends(require_api_token)):
     global state, current_applied_signature
     state = state_from_dict(payload.model_dump())
     _save_state()
@@ -229,12 +273,12 @@ async def set_state(payload: StateInput):
 
 
 @app.get("/api/presets")
-async def list_presets():
+async def list_presets(_token: str = Depends(require_api_token)):
     return {"ok": True, "presets": preset_store.list()}
 
 
 @app.post("/api/presets")
-async def create_preset(payload: PresetInput):
+async def create_preset(payload: PresetInput, _token: str = Depends(require_api_token)):
     try:
         record = preset_store.create(payload)
         return {"ok": True, "preset": record}
@@ -243,7 +287,7 @@ async def create_preset(payload: PresetInput):
 
 
 @app.put("/api/presets/{preset_id}")
-async def update_preset(preset_id: str, payload: PresetInput):
+async def update_preset(preset_id: str, payload: PresetInput, _token: str = Depends(require_api_token)):
     try:
         record = preset_store.update(preset_id, payload)
         return {"ok": True, "preset": record}
@@ -252,7 +296,7 @@ async def update_preset(preset_id: str, payload: PresetInput):
 
 
 @app.delete("/api/presets/{preset_id}")
-async def delete_preset(preset_id: str):
+async def delete_preset(preset_id: str, _token: str = Depends(require_api_token)):
     try:
         preset_store.delete(preset_id)
         return {"ok": True}
@@ -261,7 +305,7 @@ async def delete_preset(preset_id: str):
 
 
 @app.post("/api/presets/{preset_id}/apply")
-async def apply_preset(preset_id: str):
+async def apply_preset(preset_id: str, _token: str = Depends(require_api_token)):
     global state
     try:
         preset = preset_store.get(preset_id)
@@ -273,7 +317,7 @@ async def apply_preset(preset_id: str):
 
 
 @app.post("/api/upload")
-async def upload_image(request: Request):
+async def upload_image(request: Request, _token: str = Depends(require_api_token)):
     content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
     ext_map = {"image/png": ".png", "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/bmp": ".bmp", "image/webp": ".webp"}
     if content_type not in ext_map:
@@ -296,7 +340,7 @@ async def upload_image(request: Request):
 
 
 @app.post("/api/push")
-async def push_state():
+async def push_state(_token: str = Depends(require_api_token)):
     try:
         return JSONResponse(await _apply_state_and_push(state, None, "manual"))
     except Exception as exc:
@@ -304,7 +348,7 @@ async def push_state():
 
 
 @app.post("/api/clear")
-async def clear_sign():
+async def clear_sign(_token: str = Depends(require_api_token)):
     async with push_lock:
         result = await ble.send_control("CLEAR")
         if result.success:
@@ -313,7 +357,7 @@ async def clear_sign():
 
 
 @app.post("/api/demo")
-async def demo_sign():
+async def demo_sign(_token: str = Depends(require_api_token)):
     async with push_lock:
         result = await ble.send_control("DEMO")
         if result.success:
@@ -322,18 +366,18 @@ async def demo_sign():
 
 
 @app.get("/api/schedule")
-async def list_schedule():
+async def list_schedule(_token: str = Depends(require_api_token)):
     return {"ok": True, "items": [item.model_dump() for item in schedule_store.list_items()]}
 
 
 @app.post("/api/schedule")
-async def create_schedule(payload: ScheduleItemInput):
+async def create_schedule(payload: ScheduleItemInput, _token: str = Depends(require_api_token)):
     item = schedule_store.create(payload)
     return {"ok": True, "item": item.model_dump()}
 
 
 @app.put("/api/schedule/{item_id}")
-async def update_schedule(item_id: str, payload: ScheduleItemInput):
+async def update_schedule(item_id: str, payload: ScheduleItemInput, _token: str = Depends(require_api_token)):
     try:
         item = schedule_store.update(item_id, payload)
         return {"ok": True, "item": item.model_dump()}
@@ -342,7 +386,7 @@ async def update_schedule(item_id: str, payload: ScheduleItemInput):
 
 
 @app.delete("/api/schedule/{item_id}")
-async def delete_schedule(item_id: str):
+async def delete_schedule(item_id: str, _token: str = Depends(require_api_token)):
     try:
         schedule_store.delete(item_id)
         return {"ok": True}
@@ -351,7 +395,7 @@ async def delete_schedule(item_id: str):
 
 
 @app.post("/api/schedule/{item_id}/enable")
-async def enable_schedule(item_id: str):
+async def enable_schedule(item_id: str, _token: str = Depends(require_api_token)):
     try:
         item = schedule_store.set_enabled(item_id, True)
         return {"ok": True, "item": item.model_dump()}
@@ -360,7 +404,7 @@ async def enable_schedule(item_id: str):
 
 
 @app.post("/api/schedule/{item_id}/disable")
-async def disable_schedule(item_id: str):
+async def disable_schedule(item_id: str, _token: str = Depends(require_api_token)):
     try:
         item = schedule_store.set_enabled(item_id, False)
         return {"ok": True, "item": item.model_dump()}
@@ -369,7 +413,7 @@ async def disable_schedule(item_id: str):
 
 
 @app.get("/api/schedule/active")
-async def schedule_active():
+async def schedule_active(_token: str = Depends(require_api_token)):
     now = datetime.now(tz=get_timezone(settings.default_timezone))
     items = schedule_store.list_items()
     active = get_active_item(items, now=now, default_tz=settings.default_timezone)
@@ -385,7 +429,7 @@ async def schedule_active():
 
 
 @app.post("/api/schedule/run-now")
-async def schedule_run_now(payload: dict):
+async def schedule_run_now(payload: dict, _token: str = Depends(require_api_token)):
     minutes = int(payload.get("minutes", 10))
     timezone = payload.get("timezone") or settings.default_timezone
     now = datetime.now(tz=get_timezone(timezone, settings.default_timezone))
@@ -443,3 +487,32 @@ async def schedule_run_now(payload: dict):
         "revert_item": revert_item.model_dump() if revert_item else None,
         "revert_mode": revert_mode,
     }
+
+
+@app.get("/api/tokens")
+async def list_tokens(_token: str = Depends(require_api_token)):
+    return {"ok": True, "tokens": auth_store.list()}
+
+
+@app.post("/api/tokens")
+async def create_token(payload: dict, _token: str = Depends(require_api_token)):
+    name = str(payload.get("name") or "Remote API token")
+    record, raw_token = auth_store.create(name)
+    return {
+        "ok": True,
+        "token": raw_token,
+        "record": {
+            "id": record.id,
+            "name": record.name,
+            "prefix": record.prefix,
+            "created_at": record.created_at,
+            "last_used_at": record.last_used_at,
+        },
+    }
+
+
+@app.delete("/api/tokens/{token_id}")
+async def delete_token(token_id: str, _token: str = Depends(require_api_token)):
+    if auth_store.delete(token_id):
+        return {"ok": True}
+    raise HTTPException(status_code=404, detail="Token not found")

@@ -84,6 +84,7 @@
     </section>
   </div>
 <script>
+    const API_TOKEN = {{ api_token | tojson }};
 const byId = (id) => document.getElementById(id);
 const nowIso = () => new Date().toISOString().slice(0,16);
 byId('start_at').value = new Date().toISOString();
@@ -111,7 +112,7 @@ function buildPayload(){
   }};
 }
 
-async function fetchJSON(url, options={}){ const r=await fetch(url, options); const d=await r.json(); if(!r.ok) throw new Error(JSON.stringify(d)); return d; }
+async function fetchJSON(url, options={}){ const headers = new Headers(options.headers || {}); headers.set('Authorization', `Bearer ${API_TOKEN}`); const r=await fetch(url, { ...options, headers }); const d=await r.json(); if(!r.ok) throw new Error(JSON.stringify(d)); return d; }
 
 async function refresh(){
   const list = await fetchJSON('/api/schedule');

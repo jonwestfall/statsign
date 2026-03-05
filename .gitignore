@@ -207,3 +207,7 @@ marimo/_lsp/
 __marimo__/
 ._DS_Store
 .DS_Store
+
+# Statsign runtime auth artifacts
+server/data/auth_tokens.json
+server/data/ui_bootstrap_token.txt
