@@ -40,6 +40,8 @@ class Settings:
     uploads_dir: Path = Path("server/data/uploads")
     builtins_dir: Path = Path("server/assets/icons")
     schedule_file: Path = Path("server/data/schedule.json")
+    auth_tokens_file: Path = Path("server/data/auth_tokens.json")
+    ui_bootstrap_file: Path = Path("server/data/ui_bootstrap_token.txt")
     default_timezone: str = "America/Chicago"
 
 
@@ -77,5 +79,7 @@ def load_settings() -> Settings:
         uploads_dir=Path(os.getenv("STATSIGN_UPLOADS_DIR", str(data_dir / "uploads"))),
         builtins_dir=Path(os.getenv("STATSIGN_BUILTIN_ICONS_DIR", str(server_dir / "assets" / "icons"))),
         schedule_file=Path(os.getenv("STATSIGN_SCHEDULE_FILE", str(data_dir / "schedule.json"))),
+        auth_tokens_file=Path(os.getenv("STATSIGN_AUTH_TOKENS_FILE", str(data_dir / "auth_tokens.json"))),
+        ui_bootstrap_file=Path(os.getenv("STATSIGN_UI_BOOTSTRAP_FILE", str(data_dir / "ui_bootstrap_token.txt"))),
         default_timezone=os.getenv("STATSIGN_DEFAULT_TIMEZONE", "America/Chicago"),
     )

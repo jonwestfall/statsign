@@ -20,6 +20,7 @@
   </head>
   <body>
     <h2>Statsign Controller</h2>
+    <p><small>API auth is enabled. Use generated Bearer tokens for remote scripts.</small></p>
     <p>BLE target: <strong>{{ device_name }}</strong> · <a href="/presets">Edit presets</a> · <a href="/schedule">Scheduling</a></p>
     <div class="grid">
       <section>
@@ -104,6 +105,14 @@
           </div>
         </div>
 
+        <h3>Remote API tokens</h3>
+        <div class="row">
+          <input id="tokenName" placeholder="Token label (e.g. office laptop)" />
+          <button onclick="createRemoteToken()">Generate token</button>
+        </div>
+        <textarea id="newToken" readonly placeholder="Generated token appears here once. Copy it now."></textarea>
+        <div id="tokenRows"></div>
+
         <h3>Logs</h3>
         <div id="logs">Ready.</div>
       </section>
@@ -111,6 +120,7 @@
 
     <script>
       const INITIAL_STATE = {{ state | tojson }};
+      const API_TOKEN = {{ api_token | tojson }};
       const dCanvas = document.getElementById('designerCanvas');
       const dCtx = dCanvas.getContext('2d');
 
@@ -118,7 +128,9 @@
       const refreshPreview = () => document.getElementById('preview').src = `/preview.png?t=${Date.now()}`;
 
       async function fetchJSON(url, options={}) {
-        const r = await fetch(url, options); const d = await r.json(); if (!r.ok) throw new Error(JSON.stringify(d)); return d;
+        const headers = new Headers(options.headers || {});
+        headers.set('Authorization', `Bearer ${API_TOKEN}`);
+        const r = await fetch(url, { ...options, headers }); const d = await r.json(); if (!r.ok) throw new Error(JSON.stringify(d)); return d;
       }
 
       function hydrate(s) {
@@ -196,6 +208,31 @@
         log(`Designer image uploaded: ${res.filename}`);
       }
 
+
+      async function refreshTokens() {
+        const res = await fetchJSON('/api/tokens');
+        const wrap = byId('tokenRows');
+        wrap.innerHTML = res.tokens.map((t) => `<div style="margin-top:8px;border:1px solid #ddd;padding:8px;">
+          <strong>${t.name}</strong> <code>${t.prefix}…</code><br/>
+          created: ${t.created_at}${t.last_used_at ? `<br/>last used: ${t.last_used_at}` : ''}
+          <div><button onclick="deleteToken('${t.id}')">Revoke</button></div>
+        </div>`).join('') || '<small>No remote tokens generated yet.</small>';
+      }
+
+      async function createRemoteToken() {
+        const name = byId('tokenName').value || 'Remote API token';
+        const res = await fetchJSON('/api/tokens', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+        byId('newToken').value = res.token;
+        await refreshTokens();
+        log('Token generated. Copy it now.');
+      }
+
+      async function deleteToken(tokenId) {
+        await fetchJSON(`/api/tokens/${tokenId}`, { method: 'DELETE' });
+        await refreshTokens();
+        log(`Token ${tokenId} revoked.`);
+      }
+
       byId("uploadFile").addEventListener('change', async (e) => {
         const file = e.target.files[0]; if (!file) return;
         const res = await fetchJSON('/api/upload', { method:'POST', headers:{'Content-Type': file.type || 'image/png', 'X-Filename': file.name}, body: await file.arrayBuffer() });
@@ -205,7 +242,7 @@
         byId("icon").value = ref; byId("image").value = ref; log(`Uploaded ${res.filename}`);
       });
 
-      hydrate(INITIAL_STATE); loadPresets(); toggleDesigner(); drawDesigner();
+      hydrate(INITIAL_STATE); loadPresets(); toggleDesigner(); drawDesigner(); refreshTokens();
     </script>
   </body>
 </html>
