@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 from typing import Iterable
 
 from PIL import Image, ImageDraw, ImageFont
+import PIL
 
 from assets import fit_image_to_box, resolve_icon
 from presets import SignState
@@ -12,13 +14,29 @@ from presets import SignState
 
 def _load_font(size: int, ttf_path: str, font_family: str = "") -> ImageFont.ImageFont:
     # Keep size-responsive behavior even when custom fonts are missing.
-    for path in (font_family, ttf_path, "DejaVuSans-Bold.ttf", "DejaVuSans.ttf"):
-        if path:
-            try:
-                return ImageFont.truetype(path, size=size)
-            except Exception:
-                pass
-    return ImageFont.load_default()
+    pil_fonts = Path(PIL.__file__).resolve().parent / "fonts"
+    candidates = [
+        font_family,
+        ttf_path,
+        str(pil_fonts / "DejaVuSans-Bold.ttf"),
+        str(pil_fonts / "DejaVuSans.ttf"),
+        "DejaVuSans-Bold.ttf",
+        "DejaVuSans.ttf",
+    ]
+    for path in candidates:
+        if not path:
+            continue
+        try:
+            return ImageFont.truetype(path, size=size)
+        except Exception:
+            continue
+    fallback = ImageFont.load_default()
+    if hasattr(fallback, "font_variant"):
+        try:
+            return fallback.font_variant(size=size)
+        except Exception:
+            pass
+    return fallback
 
 
 def _line_height(font: ImageFont.ImageFont) -> int:
