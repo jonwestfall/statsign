@@ -211,3 +211,7 @@ __marimo__/
 # Statsign runtime auth artifacts
 server/data/auth_tokens.json
 server/data/ui_bootstrap_token.txt
+
+# Statsign local runtime data
+server/data/
+/data/

@@ -25,7 +25,7 @@
     <div class="grid">
       <section>
         <label>Preset</label>
-        <div class="row"><select id="presetSelect"></select><button onclick="applyPreset()">Apply</button></div>
+        <div class="row"><select id="presetSelect"></select><button onclick="loadPreset()">Load preset</button><button onclick="applyPreset()">Apply</button></div>
         <div class="row" style="margin-top:8px;">
           <input id="presetName" placeholder="Preset name (for Save as Preset)" />
           <button onclick="saveAsPreset()">Save as Preset</button>
@@ -173,6 +173,23 @@
           presetSelect.value = loadedPresetId;
         }
       }
+      async function loadPreset() {
+        const presetSelect = byId("presetSelect");
+        if (!presetSelect.value) return;
+        const res = await fetchJSON('/api/presets');
+        const preset = (res.presets || []).find((p) => p.id === presetSelect.value);
+        if (!preset) {
+          log(`Preset not found: ${presetSelect.value}`);
+          return;
+        }
+        loadedPresetId = preset.id;
+        byId('presetName').value = preset.name || '';
+        hydrate(preset);
+        toggleDesigner();
+        refreshPreview();
+        log(`Loaded ${preset.id} for editing`);
+      }
+
       async function applyPreset() {
         const presetSelect = byId("presetSelect");
         if (!presetSelect.value) return;
