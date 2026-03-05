@@ -26,6 +26,10 @@
       <section>
         <label>Preset</label>
         <div class="row"><select id="presetSelect"></select><button onclick="applyPreset()">Apply</button></div>
+        <div class="row" style="margin-top:8px;">
+          <input id="presetName" placeholder="Preset name (for Save as Preset)" />
+          <button onclick="saveAsPreset()">Save as Preset</button>
+        </div>
 
         <label>Status</label><input id="status" />
         <label>Message</label><textarea id="message"></textarea>
@@ -123,6 +127,7 @@
       const API_TOKEN = {{ api_token | tojson }};
       const dCanvas = document.getElementById('designerCanvas');
       const dCtx = dCanvas.getContext('2d');
+      let loadedPresetId = null;
 
       const log = (m) => document.getElementById('logs').textContent = Array.isArray(m) ? m.join('\n') : String(m);
       const refreshPreview = () => document.getElementById('preview').src = `/preview.png?t=${Date.now()}`;
@@ -163,12 +168,46 @@
         const presetSelect = byId("presetSelect");
         presetSelect.innerHTML = '<option value="">(select preset)</option>';
         for (const p of res.presets) presetSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+
+        if (loadedPresetId && res.presets.some((p) => p.id === loadedPresetId)) {
+          presetSelect.value = loadedPresetId;
+        }
       }
       async function applyPreset() {
         const presetSelect = byId("presetSelect");
         if (!presetSelect.value) return;
         const res = await fetchJSON(`/api/presets/${presetSelect.value}/apply`, { method:'POST' });
+        loadedPresetId = presetSelect.value;
+        const selectedName = presetSelect.options[presetSelect.selectedIndex]?.text || '';
+        byId('presetName').value = selectedName;
         hydrate(res.state); toggleDesigner(); refreshPreview(); log(`Applied ${presetSelect.value}`);
+      }
+
+      byId('presetSelect').addEventListener('change', (e) => {
+        if (!e.target.value) loadedPresetId = null;
+      });
+
+      async function saveAsPreset() {
+        const name = byId('presetName').value.trim() || 'New preset';
+        const payload = { ...statePayload(), name };
+
+        if (loadedPresetId) {
+          await fetchJSON(`/api/presets/${loadedPresetId}`, {
+            method: 'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload),
+          });
+          await loadPresets();
+          log(`Updated preset: ${loadedPresetId}`);
+          return;
+        }
+
+        const created = await fetchJSON('/api/presets', {
+          method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload),
+        });
+        loadedPresetId = created.preset.id;
+        byId('presetName').value = created.preset.name;
+        await loadPresets();
+        byId('presetSelect').value = loadedPresetId;
+        log(`Created preset: ${loadedPresetId}`);
       }
 
       async function saveStateAndPreview() {

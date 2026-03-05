@@ -46,12 +46,13 @@
 
   <script>
     const API_TOKEN = {{ api_token | tojson }};
+    const byId = (fieldId) => document.getElementById(fieldId);
     async function fetchJSON(url, options = {}) { const headers = new Headers(options.headers || {}); headers.set('Authorization', `Bearer ${API_TOKEN}`); const r = await fetch(url, { ...options, headers }); const d = await r.json(); if (!r.ok) throw new Error(JSON.stringify(d)); return d; }
     function payload() {
       return {
-        id: id.value || null, name: name.value, status: status.value, message: message.value, location: location.value, return_time: return_time.value,
-        layout: layout.value, icon: icon.value, image: image.value,
-        style: { headline_size: Number(headline_size.value || 86), message_size: Number(message_size.value || 42), footer_size: Number(footer_size.value || 20) },
+        id: byId('id').value || null, name: byId('name').value, status: byId('status').value, message: byId('message').value, location: byId('location').value, return_time: byId('return_time').value,
+        layout: byId('layout').value, icon: byId('icon').value, image: byId('image').value,
+        style: { headline_size: Number(byId('headline_size').value || 86), message_size: Number(byId('message_size').value || 42), footer_size: Number(byId('footer_size').value || 20) },
       };
     }
     async function load() {
@@ -69,7 +70,7 @@
       const st = p.style || {}; for (const k of ['headline_size','message_size','footer_size']) if (st[k]) document.getElementById(k).value = st[k];
     }
     async function createPreset() { await fetchJSON('/api/presets', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload())}); await load(); }
-    async function updatePreset() { if (!id.value) return alert('Set ID'); await fetchJSON(`/api/presets/${id.value}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload())}); await load(); }
+    async function updatePreset() { if (!byId('id').value) return alert('Set ID'); await fetchJSON(`/api/presets/${byId('id').value}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload())}); await load(); }
     async function delPreset(pid) { await fetchJSON(`/api/presets/${pid}`, { method:'DELETE' }); await load(); }
     load();
   </script>
